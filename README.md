@@ -1,123 +1,191 @@
+<div align="center">
+
+<img src="packaging/trackwright.svg" alt="Trackwright logo" width="96">
+
 # Trackwright
 
-Audio- und Untertitelspuren aus vielen MKV-Dateien auf einmal entfernen und **Standard** bzw.
-**Forced** setzen – mit einer grafischen Oberfläche (egui) nach dem Vorbild von
-[mkv-muxing-batch-gui](https://github.com/yaser01/mkv-muxing-batch-gui). Die eigentliche Arbeit
-erledigen `mkvmerge` und `mkvpropedit` aus [MKVToolNix](https://mkvtoolnix.download/);
-Trackwright wählt den schnellsten Weg, prüft das Ergebnis und schützt die Originale.
+**Strip unwanted audio and subtitle tracks from hundreds of MKV files at once, and set
+*Default* / *Forced* flags, safely.**
 
-Trackwright baut nur den Kern des Vorbilds nach: Spuren rausnehmen und Standard/Forced setzen.
-Spuren hinzufügen ist kein Ziel.
+[![CI](https://github.com/Kyusetzu/Trackwright/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kyusetzu/Trackwright/actions/workflows/ci.yml)
+[![License: AGPL v3+](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
+![Rust 1.95+](https://img.shields.io/badge/rust-1.95%2B-orange.svg)
+![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey.svg)
 
-## Voraussetzungen und Installation
+</div>
 
-- Linux (entwickelt für KDE Plasma unter Wayland; X11 funktioniert ebenfalls)
-- MKVToolNix ≥ 70; Arch/CachyOS: `sudo pacman -S mkvtoolnix-cli`
-- Zum Bauen: Rust ≥ 1.95 (`rustup update stable`)
-- Für die Dateidialoge: `xdg-desktop-portal` (unter KDE: `xdg-desktop-portal-kde`)
+---
+
+Trackwright is a desktop app (Rust + [egui](https://github.com/emilk/egui)) for batch-cleaning
+Matroska files. Pick the languages or track numbers you want to keep, choose which track should be
+the default, and Trackwright works through the whole folder for you. It picks the fastest method
+for each file, verifies every result, and never puts your originals at risk.
+
+The heavy lifting is done by `mkvmerge` and `mkvpropedit` from
+[MKVToolNix](https://mkvtoolnix.download/). The UI is modelled on
+[mkv-muxing-batch-gui](https://github.com/yaser01/mkv-muxing-batch-gui), but Trackwright only does
+the core job: **removing tracks and setting flags**. It does not add tracks.
+
+## Highlights
+
+- 🗂 **Batch processing.** Load whole folders recursively, pick files, or **drag & drop** files and
+  folders onto the window.
+- 🎯 **Keep by number, language or name.** Example: "keep Japanese audio and German subtitles",
+  "keep audio 1 only", "drop everything named *Commentary*".
+- ⭐ **Default / Forced in one click.** A tri-state checkbox sets *Default* or *Default + Forced*
+  and clears the flag on every other track of that type.
+- ⚡ **Fastest path per file.** If only flags change, `mkvpropedit` edits the header in
+  milliseconds. A full remux only runs when tracks are actually removed.
+- 🔍 **Preview before you run.** The queue shows the planned action for every file. Hover a file
+  to see the exact change and the exact command; right-click to copy it.
+- 📉 **See what you saved.** After a run, every file shows `before → after (±x %)`, and the status
+  bar totals the whole batch.
+- 🛡 **Safe by design.** Results are verified with `mkvmerge -J` before they replace anything.
+  Originals go to the trash, never get overwritten in place.
+- ⚙ **Persistent output folder.** Set a fixed output folder once in *Settings*, and it is filled in
+  on every start.
+
+## Quick start
+
+**Requirements:** Linux (built for KDE Plasma on Wayland; X11 works too), MKVToolNix ≥ 70,
+Rust ≥ 1.95, and `xdg-desktop-portal` for the file dialogs (`xdg-desktop-portal-kde` on KDE).
 
 ```bash
+# Arch / CachyOS
+sudo pacman -S mkvtoolnix-cli
+
 git clone https://github.com/Kyusetzu/Trackwright.git
 cd Trackwright
-packaging/install.sh      # baut und installiert nach ~/.local (Programm, Startmenü-Eintrag, Icon)
+packaging/install.sh   # builds a release binary, installs to ~/.local (binary, menu entry, icon)
 ```
 
-Danach startest du die App über das Startmenü („Trackwright“) oder mit
-`trackwright-gui [ORDNER|DATEIEN …]`. Für Arch liegt ein `packaging/PKGBUILD` bei.
+Start it from your application menu (**Trackwright**) or from a terminal:
 
-## Bedienung
+```bash
+trackwright-gui ~/Videos/Series   # folders or files are optional
+```
 
-### Reiter „Videos“
+To update later, run `git pull` and then `packaging/install.sh` again. Arch users can also build the
+included [`packaging/PKGBUILD`](packaging/PKGBUILD).
 
-- **Quellordner** eingeben (Enter) oder über *Durchsuchen …* wählen; alle `*.mkv` darin werden
-  rekursiv geladen. *Dateien hinzufügen …* und Drag & Drop funktionieren ebenfalls. Für Drag & Drop
-  läuft die GUI unter Wayland über XWayland (winit kann unter Wayland keine Datei-Drops);
-  `TRACKWRIGHT_WAYLAND=1` erzwingt natives Wayland ohne Drag & Drop.
-- Die Liste zeigt Name, Größe und Spuranzahl (V/A/U). ⚠ markiert Dateien mit Spuren ohne Sprache.
-- Ein Klick auf eine Datei zeigt darunter ihre Spuren: ID, Typ, Nummer, Sprache, Codec, Kanäle,
-  Name, Standard, Forced.
+## Usage
 
-### Reiter „Mux-Einstellungen“
+### 1. Add videos (*🎞 Videos* tab)
 
-| Einstellung | Wirkung |
+| Method | How |
 |---|---|
-| **Zielordner** | Ergebnisse landen dort (Ordnerstruktur ab dem Quellordner wird gespiegelt). **Leer lassen = Originale ersetzen**; vor dem Start fragt ein Dialog nach. |
-| **☐ Nur diese Audios behalten:** [Auswahl] | Mehrfachauswahl aus allen geladenen Dateien: *Nummer* (Audio 1, 2, …), *Sprache* (Deutsch, Japanisch, undefiniert, …), *Name*. Eine Spur bleibt, wenn sie **irgendeinen** angehakten Eintrag trifft. Nichts angehakt = alle Audios verwerfen. |
-| **☐ Diese Audio als Standard:** [Auswahl] | Checkbox mit drei Zuständen: **halb** = die gewählte Spur wird Standard, **ganz** = Standard **und** Forced. Alle anderen Spuren des Typs verlieren das Flag. „Keine“ entfernt Standard überall. |
-| **Untertitel** | dieselben zwei Zeilen für Untertitel |
-| **Bei Fehlern abbrechen** | Der erste Fehler stoppt die restliche Warteschlange. |
-| **Ohne Papierkorb …** | Nur beim Ersetzen: Auf Freigaben ohne Papierkorb (SMB/NFS) wandert das Original nach `_trackwright-original/`, statt dass die Datei gesperrt wird. |
+| Source folder | Type a path and press Enter, or use *Durchsuchen …* (Browse). All `*.mkv` files are loaded recursively. |
+| Single files | *Dateien hinzufügen …* (Add files) |
+| Drag & drop | Drop files or folders anywhere on the window. |
 
-Die **Warteschlange** zeigt pro Datei die geplante Aktion. Fährst du mit der Maus darüber,
-siehst du die genaue Änderung und den exakten Befehl; per Rechtsklick lässt er sich kopieren.
+The list shows name, size and track counts (`V`ideo / `A`udio / `U`ntertitel, i.e. subtitles).
+⚠ marks files that contain tracks without a language. Click a file to see its tracks: ID, type,
+number, language, codec, channels, name, Default and Forced.
 
-- *Remux (−n Spuren)*: Spuren werden entfernt, die Datei wird neu geschrieben.
-- *nur Header*: Nur Flags ändern sich, `mkvpropedit` erledigt das in Sekundenbruchteilen.
-- *nichts zu tun*
-- *übersprungen*, mit Grund
+### 2. Choose what to keep (*⚙ Mux-Einstellungen* tab)
 
-**Fehlt eine gewählte Spur** in einer Datei (z. B. „Audio 3“ oder „Sprache jpn“), wird die Datei
-übersprungen und rot markiert. Es wird also nie stillschweigend weniger behalten als gewählt. Eine
-Spur ohne Sprache zählt nur für den Eintrag „undefiniert“, nie für eine echte Sprache. Sprachcodes
-werden normalisiert: `ger` = `deu` = `de`.
-
-*Starten* arbeitet die Warteschlange nacheinander ab, mit Fortschritt pro Datei und gesamt sowie
-Log; *Abbrechen* beendet den laufenden Prozess sofort. Die Spalte *Größe* zeigt die Originalgröße, nach dem
-Konvertieren „vorher → nachher (±x %)“; die Statuszeile und das Log nennen die
-Summe des Laufs.
-
-Unter *⚙ Einstellungen* (oben rechts) lässt sich ein **fester Ausgabeordner** festlegen. Er wird in
-`~/.config/trackwright/gui.json` gespeichert und bei jedem Start als Zielordner eingetragen; im
-Reiter „Mux-Einstellungen“ kann er pro Lauf geändert werden.
-
-## Datensicherheit
-
-| Fall | Werkzeug |
+| Setting | Effect |
 |---|---|
-| nur Standard/Forced ändern | `mkvpropedit` (Spuren über `track:=<UID>` adressiert); bei Zielordner wird vorher kopiert |
-| Spuren entfernen | `mkvmerge`-Remux in `<Name>.trackwright.tmp.mkv` im Zielverzeichnis, Flags in einem Lauf |
+| **Destination folder** (*Zielordner*) | Results are written there, mirroring the folder structure below the source folder. **Leave it empty to replace the originals**; you are asked to confirm before the run starts. |
+| **Keep only these audio tracks** (*Nur diese Audios behalten*) | Multi-select built from all loaded files, by *number* (Audio 1, 2, …), *language* (German, Japanese, undefined, …) or *name*. A track is kept if it matches **any** checked entry. Nothing checked means all audio tracks are dropped. |
+| **Make this audio track the default** (*Diese Audio als Standard*) | Tri-state checkbox: **half** = the chosen track becomes *Default*, **full** = *Default* **and** *Forced*. Every other track of that type loses the flag. *None* clears *Default* everywhere. |
+| **Subtitles** | The same two rows for subtitle tracks. |
+| **Abort on errors** (*Bei Fehlern abbrechen*) | The first error stops the rest of the queue. |
+| **Without trash** (*Ohne Papierkorb*) | Only when replacing. On shares without a trash can (SMB/NFS), the original is moved to `_trackwright-original/` instead of the file being refused. |
 
-1. Ein Original wird nie direkt überschrieben. Beim Ersetzen wandert es erst nach erfolgreicher
-   Prüfung in den Papierkorb, dann ersetzt das Ergebnis es per atomarem `rename`.
-2. **Prüfung** mit `mkvmerge -J`: Spuren, Sprachen, Namen, Standard/Forced, Größe > 0, Anhänge
-   und Kapitel. Dauer: Ohne entfernte Spuren gilt < 1 s Abweichung. Werden Spuren entfernt, darf
-   die Datei bis max(5 s, 1 %) kürzer werden, denn die Containerdauer ist das Ende der längsten
-   Spur, und eine entfernte Audio- oder Untertitelspur läuft oft ein paar Sekunden länger als das
-   Video. Länger werden darf sie nie. Bei Abweichung bleibt das Ergebnis als
-   `<Name>.failed.mkv` liegen, das Original ist unangetastet.
-3. Fehler (z. B. voller Datenträger) oder Abbruch: Der Prozess wird beendet, die tmp-Datei
-   gelöscht, das Original bleibt unangetastet. Exit-Code 1 (Warnungen) gilt als Erfolg.
-4. Vor dem Bearbeiten prüft Trackwright, ob die Datei seit dem Einlesen unverändert und
-   beschreibbar ist.
-5. Video, Kapitel, Anhänge (Fonts für ASS) und Tags bleiben erhalten.
-6. Programme laufen ohne Shell und mit `LC_ALL=C.UTF-8`. Ohne UTF-8-Locale verstümmelt
-   MKVToolNix Namen wie `日本語`.
+Language codes are normalised (`ger` = `deu` = `de`). A track without a language only matches the
+*undefined* entry, never a real language.
 
-## Entwicklung und Tests
+### 3. Check the queue and run
 
+Every file gets one of these actions:
+
+| Action | Meaning |
+|---|---|
+| **Remux (−n tracks)** | Tracks are removed; the file is rewritten by `mkvmerge`. |
+| **Header only** | Only flags change; `mkvpropedit` does it in a fraction of a second. |
+| **Nothing to do** | The file already matches your selection. |
+| **Skipped** | With a reason, e.g. a selected track is missing. |
+
+If a file **lacks a track you selected** (for example "Audio 3" or "language jpn"), it is skipped
+and marked red. Trackwright never silently keeps less than you asked for.
+
+*▶ Starten* (Start) processes the queue one file at a time, with per-file and overall progress and a log.
+*⏹ Abbrechen* (Cancel) stops the running process immediately. When a file is done, the **Size** column changes
+from the original size to `before → after (±x %)`, and the status bar shows the total for the run.
+
+### Settings
+
+Open **⚙ Einstellungen** (Settings, top right) to set a **fixed output folder**. It is saved in
+`~/.config/trackwright/gui.json` and filled in as the destination on every start. You can still
+change the destination for a single run in the *Mux-Einstellungen* tab. Leave it empty to replace
+originals by default.
+
+### Drag & drop on Wayland
+
+winit, the windowing library egui uses, cannot receive file drops on native Wayland. Trackwright
+therefore runs through **XWayland** by default so that drag & drop works. To force native Wayland
+(without drag & drop), start it with:
+
+```bash
+TRACKWRIGHT_WAYLAND=1 trackwright-gui
 ```
-crates/core  Probe, Sprachen, Auswahl (selection), Plan, Befehlsbau, Executor, Prüfung, Jobs
-crates/gui   Oberfläche (eframe/egui), Worker-Threads, zentrale Texte in strings.rs
-tests/fixtures/make.sh   erzeugt synthetische MKVs mit ffmpeg + mkvmerge
+
+> **Tip:** if text looks blurry under XWayland with fractional scaling, set *Legacy applications
+> (X11) → Apply scaling themselves* in KDE's display settings.
+
+## How your files are kept safe
+
+| Case | Tool |
+|---|---|
+| Only *Default* / *Forced* change | `mkvpropedit`, addressing tracks by UID (`track:=<UID>`). With a destination folder, the file is copied first. |
+| Tracks are removed | `mkvmerge` remux into `<name>.trackwright.tmp.mkv` next to the target, flags set in the same pass. |
+
+1. **Originals are never overwritten in place.** When replacing, the original goes to the trash
+   only after the result has passed verification, and the result then takes its place with an
+   atomic `rename`.
+2. **Every result is verified** with `mkvmerge -J`: tracks, languages, names, Default/Forced, size
+   > 0, attachments and chapters. Duration may differ by less than 1 s, or, when tracks were
+   removed, get shorter by up to max(5 s, 1 %): the container duration is the end of the longest
+   track, and a removed audio or subtitle track often runs a few seconds past the video. It may
+   never get longer. If verification fails, the result is kept as `<name>.failed.mkv` and the
+   original stays untouched.
+3. **Errors and cancellation** (such as a full disk) stop the process, delete the temp file and
+   leave the original untouched. Exit code 1 (warnings only) counts as success.
+4. Before writing, Trackwright checks that the file is **unchanged since it was scanned** and is
+   writable.
+5. Video, chapters, attachments (e.g. fonts for ASS subtitles) and tags are preserved.
+6. Tools run **without a shell** and with `LC_ALL=C.UTF-8`. Without a UTF-8 locale, MKVToolNix
+   mangles names such as `日本語`.
+
+## Development
+
+```text
+crates/core              probe, languages, selection, planner, command builder, executor,
+                         verification, jobs
+crates/gui               UI (eframe/egui), worker threads, settings; all UI strings in strings.rs
+tests/fixtures/make.sh   generates synthetic MKVs with ffmpeg + mkvmerge
+packaging/               install.sh, PKGBUILD, .desktop file, icon
 ```
+
+Run these before every push (CI runs the same):
 
 ```bash
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 ```
 
-Die Integrationstests rufen echte `mkvmerge`/`mkvpropedit` auf. Sie decken ab:
+The integration tests call the real `mkvmerge` / `mkvpropedit` and cover flag-only edits, remuxing
+into a destination folder, replacing with trash, 50 files in one batch, special characters in
+file names, read-only and corrupt files, and simulated failures (full disk, cancellation, failed
+verification). Without MKVToolNix and ffmpeg they report "skipped"; in CI
+(`TRACKWRIGHT_REQUIRE_TOOLS=1`) they fail instead.
 
-- nur Flags, Remux in einen Zielordner, Ersetzen mit Papierkorb, 50 Dateien nur Flags
-- Sonderzeichen in Dateinamen, schreibgeschützte und kaputte Dateien
-- voller Datenträger, Abbruch und fehlgeschlagene Prüfung (simuliert über ein vorgeschaltetes
-  Skript)
+The UI itself is in German. All UI strings live in `crates/gui/src/strings.rs`, so a translation
+only needs to touch that file.
 
-Fehlt MKVToolNix, melden sie „übersprungen“; in CI (`TRACKWRIGHT_REQUIRE_TOOLS=1`) schlagen sie
-dann fehl.
+## License
 
-## Lizenz
-
-[GNU Affero General Public License v3.0 oder später](LICENSE). MKVToolNix wird nur als externes
-Programm aufgerufen.
+[GNU Affero General Public License v3.0 or later](LICENSE). MKVToolNix is only invoked as an
+external program.
