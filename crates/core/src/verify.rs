@@ -83,10 +83,22 @@ pub fn verify(plan: &FilePlan, result: &MediaInfo) -> Result<(), Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{PlanOptions, plan_file};
     use crate::probe::parse_identification;
-    use crate::rules::RuleSet;
+    use crate::selection::{DefaultChoice, Selection, TrackRef, TypeSelection, plan_file};
     use std::path::Path;
+
+    fn sel(keep: Option<Vec<u32>>, default: Option<u32>) -> Selection {
+        Selection {
+            audio: TypeSelection {
+                keep: keep.map(|k| k.into_iter().map(TrackRef::Number).collect()),
+                default: match default {
+                    Some(n) => DefaultChoice::Default(Some(TrackRef::Number(n))),
+                    None => DefaultChoice::Default(None),
+                },
+            },
+            ..Default::default()
+        }
+    }
 
     fn media() -> MediaInfo {
         let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/json/full.json");
@@ -99,22 +111,18 @@ mod tests {
     #[test]
     fn identical_file_passes() {
         let m = media();
-        let rules: RuleSet = toml::from_str("[audio]\ndefault = \"Nr. 1\"").expect("toml");
-        let plan = plan_file(&m, &rules, None, &PlanOptions::default()).expect("plan");
+        let plan = plan_file(&m, &sel(None, Some(1))).expect("plan");
         assert_eq!(verify(&plan, &m), Ok(()));
     }
 
     #[test]
     fn detects_deviations() {
         let m = media();
-        let rules: RuleSet =
-            toml::from_str("[audio]\nkeep = \"Nr. 1\"\ndefault = \"keine\"").expect("toml");
-        let plan = plan_file(&m, &rules, None, &PlanOptions::default()).expect("plan");
+        let plan = plan_file(&m, &sel(Some(vec![1]), None)).expect("plan");
         let errs = verify(&plan, &m).expect_err("Spuranzahl");
         assert!(errs[0].contains("Spuren erwartet"), "{errs:?}");
 
-        let rules: RuleSet = toml::from_str("[audio]\ndefault = \"Nr. 2\"").expect("toml");
-        let plan = plan_file(&m, &rules, None, &PlanOptions::default()).expect("plan");
+        let plan = plan_file(&m, &sel(None, Some(2))).expect("plan");
         let mut bad = m.clone();
         bad.duration_ns = Some(9_000_000_000);
         bad.size = 0;

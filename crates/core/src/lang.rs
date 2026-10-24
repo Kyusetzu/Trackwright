@@ -1,5 +1,5 @@
 //! Sprachcodes: Normalisierung von ISO 639-2/B, ISO 639-2/T und BCP 47 auf einen gemeinsamen
-//! Schlüssel sowie Sprachvorschläge aus Spurnamen.
+//! Schlüssel und deutsche Anzeigenamen.
 //!
 //! `und`, leere Werte und fehlende Felder gelten als [`Lang::Undefined`] und sind ein
 //! eigener Wert: Sie treffen nie stillschweigend eine echte Sprache.
@@ -15,8 +15,6 @@ struct LangEntry {
     terminologic: Option<&'static str>,
     /// ISO 639-1, falls vorhanden (z. B. `de`). Bevorzugter BCP-47-Primärtag.
     two_letter: Option<&'static str>,
-    /// Kleingeschriebene Schlüsselwörter für die Erkennung aus Spurnamen.
-    keywords: &'static [&'static str],
     /// Deutscher Anzeigename.
     display: &'static str,
 }
@@ -25,64 +23,62 @@ const fn e(
     bibliographic: &'static str,
     terminologic: Option<&'static str>,
     two_letter: Option<&'static str>,
-    keywords: &'static [&'static str],
     display: &'static str,
 ) -> LangEntry {
     LangEntry {
         bibliographic,
         terminologic,
         two_letter,
-        keywords,
         display,
     }
 }
 
 #[rustfmt::skip]
 static TABLE: &[LangEntry] = &[
-    e("ger", Some("deu"), Some("de"), &["deutsch", "german", "ger", "deu", "germandub"], "Deutsch"),
-    e("eng", None, Some("en"), &["english", "englisch", "eng"], "Englisch"),
-    e("jpn", None, Some("ja"), &["japanese", "japanisch", "jpn", "jap", "日本語"], "Japanisch"),
-    e("fre", Some("fra"), Some("fr"), &["french", "français", "francais", "französisch", "fre", "fra"], "Französisch"),
-    e("spa", None, Some("es"), &["spanish", "español", "espanol", "spanisch", "castellano", "spa"], "Spanisch"),
-    e("ita", None, Some("it"), &["italian", "italiano", "italienisch", "ita"], "Italienisch"),
-    e("por", None, Some("pt"), &["portuguese", "português", "portugues", "portugiesisch", "por"], "Portugiesisch"),
-    e("rus", None, Some("ru"), &["russian", "русский", "russisch", "rus"], "Russisch"),
-    e("chi", Some("zho"), Some("zh"), &["chinese", "chinesisch", "中文", "chi", "zho", "mandarin", "cantonese"], "Chinesisch"),
-    e("kor", None, Some("ko"), &["korean", "koreanisch", "한국어", "kor"], "Koreanisch"),
-    e("dut", Some("nld"), Some("nl"), &["dutch", "nederlands", "niederländisch", "dut", "nld"], "Niederländisch"),
-    e("pol", None, Some("pl"), &["polish", "polski", "polnisch", "pol"], "Polnisch"),
-    e("swe", None, Some("sv"), &["swedish", "svenska", "schwedisch", "swe"], "Schwedisch"),
-    e("nor", None, Some("no"), &["norwegian", "norsk", "norwegisch", "nor"], "Norwegisch"),
-    e("dan", None, Some("da"), &["danish", "dansk", "dänisch", "dan"], "Dänisch"),
-    e("fin", None, Some("fi"), &["finnish", "suomi", "finnisch", "fin"], "Finnisch"),
-    e("tur", None, Some("tr"), &["turkish", "türkçe", "turkce", "türkisch", "tur"], "Türkisch"),
-    e("ara", None, Some("ar"), &["arabic", "العربية", "arabisch", "ara"], "Arabisch"),
-    e("hin", None, Some("hi"), &["hindi", "हिन्दी", "hin"], "Hindi"),
-    e("cze", Some("ces"), Some("cs"), &["czech", "čeština", "cestina", "tschechisch", "cze", "ces"], "Tschechisch"),
-    e("hun", None, Some("hu"), &["hungarian", "magyar", "ungarisch", "hun"], "Ungarisch"),
-    e("gre", Some("ell"), Some("el"), &["greek", "ελληνικά", "griechisch", "gre", "ell"], "Griechisch"),
-    e("heb", None, Some("he"), &["hebrew", "עברית", "hebräisch", "heb"], "Hebräisch"),
-    e("tha", None, Some("th"), &["thai", "ไทย", "tha"], "Thailändisch"),
-    e("vie", None, Some("vi"), &["vietnamese", "tiếng việt", "vietnamesisch", "vie"], "Vietnamesisch"),
-    e("ukr", None, Some("uk"), &["ukrainian", "українська", "ukrainisch", "ukr"], "Ukrainisch"),
-    e("ind", None, Some("id"), &["indonesian", "bahasa indonesia", "indonesisch", "ind"], "Indonesisch"),
-    e("may", Some("msa"), Some("ms"), &["malay", "bahasa melayu", "malaiisch", "may", "msa"], "Malaiisch"),
-    e("rum", Some("ron"), Some("ro"), &["romanian", "română", "romana", "rumänisch", "rum", "ron"], "Rumänisch"),
-    e("bul", None, Some("bg"), &["bulgarian", "български", "bulgarisch", "bul"], "Bulgarisch"),
-    e("hrv", None, Some("hr"), &["croatian", "hrvatski", "kroatisch", "hrv"], "Kroatisch"),
-    e("srp", None, Some("sr"), &["serbian", "srpski", "српски", "serbisch", "srp"], "Serbisch"),
-    e("slo", Some("slk"), Some("sk"), &["slovak", "slovenčina", "slowakisch", "slk"], "Slowakisch"),
-    e("slv", None, Some("sl"), &["slovenian", "slovenščina", "slowenisch", "slv"], "Slowenisch"),
-    e("cat", None, Some("ca"), &["catalan", "català", "katalanisch", "cat"], "Katalanisch"),
-    e("est", None, Some("et"), &["estonian", "eesti", "estnisch", "est"], "Estnisch"),
-    e("lav", None, Some("lv"), &["latvian", "latviešu", "lettisch", "lav"], "Lettisch"),
-    e("lit", None, Some("lt"), &["lithuanian", "lietuvių", "litauisch", "lit"], "Litauisch"),
-    e("ice", Some("isl"), Some("is"), &["icelandic", "íslenska", "isländisch", "ice", "isl"], "Isländisch"),
-    e("per", Some("fas"), Some("fa"), &["persian", "farsi", "فارسی", "persisch", "per", "fas"], "Persisch"),
-    e("tam", None, Some("ta"), &["tamil", "தமிழ்", "tam"], "Tamil"),
-    e("tel", None, Some("te"), &["telugu", "తెలుగు", "tel"], "Telugu"),
-    e("tgl", None, Some("tl"), &["tagalog", "filipino", "tgl", "fil"], "Tagalog"),
-    e("lat", None, Some("la"), &["latin", "latein", "lat"], "Latein"),
+    e("ger", Some("deu"), Some("de"), "Deutsch"),
+    e("eng", None, Some("en"), "Englisch"),
+    e("jpn", None, Some("ja"), "Japanisch"),
+    e("fre", Some("fra"), Some("fr"), "Französisch"),
+    e("spa", None, Some("es"), "Spanisch"),
+    e("ita", None, Some("it"), "Italienisch"),
+    e("por", None, Some("pt"), "Portugiesisch"),
+    e("rus", None, Some("ru"), "Russisch"),
+    e("chi", Some("zho"), Some("zh"), "Chinesisch"),
+    e("kor", None, Some("ko"), "Koreanisch"),
+    e("dut", Some("nld"), Some("nl"), "Niederländisch"),
+    e("pol", None, Some("pl"), "Polnisch"),
+    e("swe", None, Some("sv"), "Schwedisch"),
+    e("nor", None, Some("no"), "Norwegisch"),
+    e("dan", None, Some("da"), "Dänisch"),
+    e("fin", None, Some("fi"), "Finnisch"),
+    e("tur", None, Some("tr"), "Türkisch"),
+    e("ara", None, Some("ar"), "Arabisch"),
+    e("hin", None, Some("hi"), "Hindi"),
+    e("cze", Some("ces"), Some("cs"), "Tschechisch"),
+    e("hun", None, Some("hu"), "Ungarisch"),
+    e("gre", Some("ell"), Some("el"), "Griechisch"),
+    e("heb", None, Some("he"), "Hebräisch"),
+    e("tha", None, Some("th"), "Thailändisch"),
+    e("vie", None, Some("vi"), "Vietnamesisch"),
+    e("ukr", None, Some("uk"), "Ukrainisch"),
+    e("ind", None, Some("id"), "Indonesisch"),
+    e("may", Some("msa"), Some("ms"), "Malaiisch"),
+    e("rum", Some("ron"), Some("ro"), "Rumänisch"),
+    e("bul", None, Some("bg"), "Bulgarisch"),
+    e("hrv", None, Some("hr"), "Kroatisch"),
+    e("srp", None, Some("sr"), "Serbisch"),
+    e("slo", Some("slk"), Some("sk"), "Slowakisch"),
+    e("slv", None, Some("sl"), "Slowenisch"),
+    e("cat", None, Some("ca"), "Katalanisch"),
+    e("est", None, Some("et"), "Estnisch"),
+    e("lav", None, Some("lv"), "Lettisch"),
+    e("lit", None, Some("lt"), "Litauisch"),
+    e("ice", Some("isl"), Some("is"), "Isländisch"),
+    e("per", Some("fas"), Some("fa"), "Persisch"),
+    e("tam", None, Some("ta"), "Tamil"),
+    e("tel", None, Some("te"), "Telugu"),
+    e("tgl", None, Some("tl"), "Tagalog"),
+    e("lat", None, Some("la"), "Latein"),
 ];
 
 fn find_entry(code: &str) -> Option<&'static LangEntry> {
@@ -174,35 +170,6 @@ impl fmt::Display for Lang {
     }
 }
 
-/// Schlägt anhand des Spurnamens eine Sprache vor („Deutsch“, „English“, „日本語“, „GER“ …).
-///
-/// Liefert nur dann einen Vorschlag, wenn genau eine Sprache erkannt wird. Der Vorschlag wird nie
-/// automatisch angewendet.
-pub fn suggest_from_name(name: &str) -> Option<Lang> {
-    let lower = name.to_lowercase();
-    let tokens: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .collect();
-    let mut found: Option<&'static LangEntry> = None;
-    for entry in TABLE {
-        let hit = entry.keywords.iter().any(|kw| {
-            if kw.is_ascii() && !kw.contains(' ') {
-                tokens.contains(kw)
-            } else {
-                lower.contains(kw)
-            }
-        });
-        if hit {
-            if found.is_some() {
-                return None;
-            }
-            found = Some(entry);
-        }
-    }
-    found.map(|e| Lang::Code(e.bibliographic.to_string()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,26 +215,5 @@ mod tests {
         assert_eq!(Lang::parse("ger").ietf(), "de");
         assert_eq!(Lang::parse("ger").iso639_2(), "ger");
         assert_eq!(Lang::parse("chi").ietf(), "zh");
-    }
-
-    #[test]
-    fn suggestions() {
-        let cases = [
-            ("Deutsch", Some("ger")),
-            ("English", Some("eng")),
-            ("日本語", Some("jpn")),
-            ("GER Dub", Some("ger")),
-            ("[German] Signs & Songs", Some("ger")),
-            ("Kommentar", None),
-            ("Generic", None),
-            ("German / English", None),
-        ];
-        for (name, expected) in cases {
-            assert_eq!(
-                suggest_from_name(name),
-                expected.map(|c| Lang::Code(c.into())),
-                "{name}"
-            );
-        }
     }
 }

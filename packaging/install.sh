@@ -7,7 +7,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PREFIX="${PREFIX:-$HOME/.local}"
 cargo build --release --locked
-install -Dm755 target/release/trackwright      "$PREFIX/bin/trackwright"
 install -Dm755 target/release/trackwright-gui  "$PREFIX/bin/trackwright-gui"
 install -Dm644 packaging/trackwright.desktop   "$PREFIX/share/applications/trackwright.desktop"
 install -Dm644 packaging/trackwright.svg       "$PREFIX/share/icons/hicolor/scalable/apps/trackwright.svg"

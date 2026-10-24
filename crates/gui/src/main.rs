@@ -37,6 +37,11 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let mut app = app::App::new(cc.egui_ctx.clone(), Tools::default());
+            if let [dir] = initial.as_slice()
+                && dir.is_dir()
+            {
+                app.model.source_path = dir.display().to_string();
+            }
             app.add_paths(initial);
             Ok(Box::new(GuiApp(app)))
         }),
@@ -68,27 +73,22 @@ mod tests {
                 }]);
             app.model.set_probe(&path, Ok(m));
         }
-        let preset = trackwright_core::preset::Preset::parse(
-            trackwright_core::preset::BUILTIN[0].1,
-            std::path::Path::new("anime"),
-        )
-        .expect("preset");
-        app.model.editor = state::RuleEditor::from_preset(&preset);
+        app.model.audio.keep_enabled = true;
+        app.model
+            .audio
+            .keep
+            .insert(trackwright_core::selection::TrackRef::Number(1));
+        app.model.subtitles.default_mode = state::DefaultMode::DefaultForced;
+        app.model.selected = Some(0);
         app.model.mark_dirty();
-        for tab in [
-            app::Tab::Files,
-            app::Tab::Rules,
-            app::Tab::Groups,
-            app::Tab::Preview,
-            app::Tab::Run,
-        ] {
+        for tab in [app::Tab::Videos, app::Tab::Mux] {
             app.tab = tab;
             for _ in 0..2 {
                 let out = ctx.run_ui(egui::RawInput::default(), |ui| app.show(ui));
                 out.drop_without_applying_deltas();
             }
         }
-        assert_eq!(app.model.summary().remux, 2);
+        assert_eq!(app.model.summary().remux, 3);
     }
 
     /// Echte Dateien über den Worker einlesen (überspringt ohne MKVToolNix).
@@ -121,6 +121,6 @@ mod tests {
             assert!(start.elapsed() < Duration::from_secs(30), "Timeout");
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert_eq!(app.model.groups.len(), 2);
+        assert_eq!(app.model.audio_options.numbers.len(), 3);
     }
 }

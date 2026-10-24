@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use trackwright_core::fsutil::{FoundFile, collect_mkv};
 use trackwright_core::job::{JobEvent, JobOptions, JobReport, run_job};
@@ -15,11 +15,9 @@ use trackwright_core::tools::Tools;
 /// Welcher Dialog ein Ergebnis geliefert hat.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pick {
-    AddFolders,
     AddFiles,
-    OutDir,
-    PresetLoad,
-    PresetSave,
+    SourceFolder,
+    Destination,
 }
 
 #[derive(Debug)]
@@ -47,6 +45,7 @@ pub enum Msg {
     },
     RunFinished {
         cancelled: bool,
+        aborted: bool,
     },
 }
 
@@ -119,23 +118,13 @@ impl Worker {
                 dialog = dialog.set_directory(dir);
             }
             let result: Vec<PathBuf> = match kind {
-                Pick::AddFolders => dialog.pick_folders().unwrap_or_default(),
                 Pick::AddFiles => dialog
                     .add_filter("Matroska", &["mkv", "MKV"])
                     .pick_files()
                     .unwrap_or_default(),
-                Pick::OutDir => dialog.pick_folder().into_iter().collect(),
-                Pick::PresetLoad => dialog
-                    .add_filter("Preset", &["toml"])
-                    .pick_file()
-                    .into_iter()
-                    .collect(),
-                Pick::PresetSave => dialog
-                    .add_filter("Preset", &["toml"])
-                    .set_file_name("preset.toml")
-                    .save_file()
-                    .into_iter()
-                    .collect(),
+                Pick::SourceFolder | Pick::Destination => {
+                    dialog.pick_folder().into_iter().collect()
+                }
             };
             if !result.is_empty() {
                 w.send(Msg::Picked(kind, result));
@@ -143,38 +132,37 @@ impl Worker {
         });
     }
 
-    /// Führt die Warteschlange mit `jobs` parallelen Dateien aus.
+    /// Arbeitet die Warteschlange nacheinander ab (wie im Vorbild). Mit `abort_on_errors` stoppt
+    /// der erste Fehler die restliche Warteschlange.
     pub fn run(
         &self,
         items: Vec<WorkItem>,
         opts: JobOptions,
-        jobs: usize,
+        abort_on_errors: bool,
         cancel: Arc<AtomicBool>,
     ) {
         let w = self.clone();
         std::thread::spawn(move || {
-            let next = AtomicUsize::new(0);
-            std::thread::scope(|scope| {
-                for _ in 0..jobs.clamp(1, 8).min(items.len().max(1)) {
-                    scope.spawn(|| {
-                        loop {
-                            if cancel.load(Ordering::Relaxed) {
-                                break;
-                            }
-                            let i = next.fetch_add(1, Ordering::Relaxed);
-                            let Some(item) = items.get(i) else { break };
-                            w.run_one(item, &opts, &cancel);
-                        }
-                    });
+            let mut aborted = false;
+            for item in &items {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
                 }
-            });
+                let ok = w.run_one(item, &opts, &cancel);
+                if !ok && abort_on_errors && !cancel.load(Ordering::Relaxed) {
+                    aborted = true;
+                    break;
+                }
+            }
             w.send(Msg::RunFinished {
                 cancelled: cancel.load(Ordering::Relaxed),
+                aborted,
             });
         });
     }
 
-    fn run_one(&self, item: &WorkItem, opts: &JobOptions, cancel: &AtomicBool) {
+    /// Liefert `true` bei Erfolg.
+    fn run_one(&self, item: &WorkItem, opts: &JobOptions, cancel: &AtomicBool) -> bool {
         let path = item.plan.path.clone();
         self.send(Msg::Job {
             path: path.clone(),
@@ -203,9 +191,11 @@ impl Worker {
                 JobEvent::Progress(_) => {}
             },
         );
+        let ok = result.is_ok();
         self.send(Msg::Job {
             path,
             msg: JobMsg::Done(result.map_err(|e| e.to_string())),
         });
+        ok
     }
 }

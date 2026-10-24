@@ -1,17 +1,14 @@
-//! GUI-Zustand ohne Darstellung: Dateiliste, Regel-Editor, Overrides, Pläne. Gut testbar.
+//! GUI-Zustand ohne Darstellung: Dateiliste, Session-Auswahl, Pläne. Gut testbar.
 
-use std::collections::HashMap;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use trackwright_core::engine::{
-    Overrides, PlanOptions, TrackOverride, language_suggestions, plan_file,
-};
 use trackwright_core::fsutil::FoundFile;
 use trackwright_core::job::{JobOptions, OutputMode};
-use trackwright_core::lang::Lang;
-use trackwright_core::model::{MediaInfo, Signature, TrackType};
+use trackwright_core::model::{MediaInfo, TrackType};
 use trackwright_core::plan::{FilePlan, Strategy};
-use trackwright_core::preset::Preset;
-use trackwright_core::rules::{Expr, FlagRule, LangAssign, NameAssign, RuleSet, TypeRules};
+use trackwright_core::selection::{
+    DefaultChoice, Options, Selection, TrackRef, TypeSelection, options, plan_file,
+};
 
 /// Einlesestatus einer Datei.
 #[derive(Debug, Clone)]
@@ -37,7 +34,7 @@ pub struct FileEntry {
     pub found: FoundFile,
     pub probe: ProbeState,
     pub job: JobState,
-    pub selected: bool,
+    pub checked: bool,
 }
 
 impl FileEntry {
@@ -57,236 +54,66 @@ impl FileEntry {
     }
 }
 
-/// Eine Zeile „Sprache setzen“ / „Name setzen“.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct AssignRow {
-    pub when: String,
-    pub value: String,
+/// Zustand der Tri-State-Checkbox „Diese … als Standard“.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DefaultMode {
+    #[default]
+    Off,
+    /// halb angehakt
+    Default,
+    /// ganz angehakt
+    DefaultForced,
 }
 
-/// Editor für die Regeln eines Spurtyps (Textfelder in Kurzsyntax).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct TypeRuleEditor {
-    pub keep: String,
-    pub default: String,
-    pub forced: String,
-    pub set_language: Vec<AssignRow>,
-    pub set_name: Vec<AssignRow>,
-}
-
-/// Prüft einen Ausdruck; leer ist erlaubt.
-pub fn expr_error(text: &str) -> Option<String> {
-    if text.trim().is_empty() {
-        return None;
-    }
-    text.parse::<Expr>().err().map(|e| e.to_string())
-}
-
-/// Prüft eine Flag-Regel (leer, „keine“ oder Ausdruck).
-pub fn flag_error(text: &str) -> Option<String> {
-    text.parse::<FlagRule>().err().map(|e| e.to_string())
-}
-
-impl TypeRuleEditor {
-    pub fn from_rules(r: &TypeRules) -> Self {
-        let flag = |f: &FlagRule| match f {
-            FlagRule::Unchanged => String::new(),
-            other => other.to_string(),
-        };
-        TypeRuleEditor {
-            keep: r.keep.as_ref().map(|e| e.to_string()).unwrap_or_default(),
-            default: flag(&r.default),
-            forced: flag(&r.forced),
-            set_language: r
-                .set_language
-                .iter()
-                .map(|a| AssignRow {
-                    when: a.when.to_string(),
-                    value: a.lang.clone(),
-                })
-                .collect(),
-            set_name: r
-                .set_name
-                .iter()
-                .map(|a| AssignRow {
-                    when: a.when.to_string(),
-                    value: a.name.clone(),
-                })
-                .collect(),
-        }
-    }
-
-    pub fn to_rules(&self, label: &str) -> Result<TypeRules, Vec<String>> {
-        let mut errors = Vec::new();
-        let mut out = TypeRules::default();
-        if !self.keep.trim().is_empty() {
-            match self.keep.parse() {
-                Ok(e) => out.keep = Some(e),
-                Err(e) => errors.push(format!("{label} behalten: {e}")),
-            }
-        }
-        match self.default.parse() {
-            Ok(f) => out.default = f,
-            Err(e) => errors.push(format!("{label} Standard: {e}")),
-        }
-        match self.forced.parse() {
-            Ok(f) => out.forced = f,
-            Err(e) => errors.push(format!("{label} Forced: {e}")),
-        }
-        for row in &self.set_language {
-            if row.when.trim().is_empty() && row.value.trim().is_empty() {
-                continue;
-            }
-            if row.value.trim().is_empty() {
-                errors.push(format!("{label} Sprache setzen: Sprachcode fehlt"));
-                continue;
-            }
-            match row.when.parse() {
-                Ok(when) => out.set_language.push(LangAssign {
-                    when,
-                    lang: row.value.trim().to_string(),
-                }),
-                Err(e) => errors.push(format!("{label} Sprache setzen: {e}")),
-            }
-        }
-        for row in &self.set_name {
-            if row.when.trim().is_empty() {
-                continue;
-            }
-            match row.when.parse() {
-                Ok(when) => out.set_name.push(NameAssign {
-                    when,
-                    name: row.value.clone(),
-                }),
-                Err(e) => errors.push(format!("{label} Name setzen: {e}")),
-            }
-        }
-        if errors.is_empty() {
-            Ok(out)
-        } else {
-            Err(errors)
+impl DefaultMode {
+    /// Klick: aus → halb → ganz → aus.
+    pub fn next(self) -> Self {
+        match self {
+            DefaultMode::Off => DefaultMode::Default,
+            DefaultMode::Default => DefaultMode::DefaultForced,
+            DefaultMode::DefaultForced => DefaultMode::Off,
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct RuleEditor {
-    pub audio: TypeRuleEditor,
-    pub subtitles: TypeRuleEditor,
+/// Bedienelemente eines Spurtyps im Reiter „Mux-Einstellungen“.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TypeControls {
+    /// Checkbox „Nur diese … behalten“.
+    pub keep_enabled: bool,
+    /// Angehakte Einträge im Dropdown.
+    pub keep: BTreeSet<TrackRef>,
+    pub default_mode: DefaultMode,
+    /// `None` = „Keine“ (Standard überall entfernen).
+    pub default_ref: Option<TrackRef>,
 }
 
-impl RuleEditor {
-    pub fn from_preset(p: &Preset) -> Self {
-        RuleEditor {
-            audio: TypeRuleEditor::from_rules(&p.audio),
-            subtitles: TypeRuleEditor::from_rules(&p.subtitles),
-        }
-    }
-
-    pub fn to_rules(&self) -> Result<RuleSet, Vec<String>> {
-        let audio = self.audio.to_rules("Audio");
-        let subtitles = self.subtitles.to_rules("Untertitel");
-        match (audio, subtitles) {
-            (Ok(audio), Ok(subtitles)) => Ok(RuleSet { audio, subtitles }),
-            (a, s) => Err(a
-                .err()
-                .unwrap_or_default()
-                .into_iter()
-                .chain(s.err().unwrap_or_default())
-                .collect()),
-        }
-    }
-
-    pub fn for_type_mut(&mut self, kind: TrackType) -> &mut TypeRuleEditor {
-        match kind {
-            TrackType::Subtitles => &mut self.subtitles,
-            _ => &mut self.audio,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ModeKind {
-    Beside,
-    Directory,
-    Replace,
-}
-
-#[derive(Debug, Clone)]
-pub struct OutputSettings {
-    pub kind: ModeKind,
-    pub suffix: String,
-    pub out_dir: Option<PathBuf>,
-    pub fallback_dir: bool,
-    pub snapshot: bool,
-    pub jobs: usize,
-}
-
-impl Default for OutputSettings {
-    fn default() -> Self {
-        OutputSettings {
-            kind: ModeKind::Beside,
-            suffix: ".trackwright".into(),
-            out_dir: None,
-            fallback_dir: false,
-            snapshot: true,
-            jobs: 1,
-        }
-    }
-}
-
-impl OutputSettings {
-    pub fn mode(&self) -> Result<OutputMode, String> {
-        Ok(match self.kind {
-            ModeKind::Beside => {
-                if self.suffix.trim().is_empty() || self.suffix.contains('/') {
-                    return Err("Suffix darf nicht leer sein und keinen „/“ enthalten".into());
+impl TypeControls {
+    pub fn to_selection(&self) -> TypeSelection {
+        TypeSelection {
+            keep: self.keep_enabled.then(|| self.keep.clone()),
+            default: match self.default_mode {
+                DefaultMode::Off => DefaultChoice::Off,
+                DefaultMode::Default => DefaultChoice::Default(self.default_ref.clone()),
+                DefaultMode::DefaultForced => {
+                    DefaultChoice::DefaultForced(self.default_ref.clone())
                 }
-                OutputMode::Beside {
-                    suffix: self.suffix.clone(),
-                }
-            }
-            ModeKind::Directory => OutputMode::Directory {
-                dir: self
-                    .out_dir
-                    .clone()
-                    .ok_or_else(|| "Bitte einen Ausgabeordner wählen".to_string())?,
             },
-            ModeKind::Replace => OutputMode::Replace {
-                fallback_dir: self.fallback_dir,
-            },
-        })
+        }
     }
 
-    pub fn job_options(&self) -> Result<JobOptions, String> {
-        Ok(JobOptions {
-            mode: self.mode()?,
-            snapshot_dir: if self.snapshot {
-                trackwright_core::fsutil::state_dir().map(|d| d.join("snapshots"))
-            } else {
-                None
-            },
-        })
+    /// Entfernt Einträge, die in keiner Datei mehr vorkommen.
+    fn retain_available(&mut self, opts: &Options) {
+        self.keep.retain(|r| opts.all().any(|o| o == r));
+        if let Some(r) = &self.default_ref
+            && !opts.all().any(|o| o == r)
+        {
+            self.default_ref = None;
+        }
     }
 }
 
-/// Gruppe gleich aufgebauter Dateien (Indizes in `Model::files`).
-#[derive(Debug, Clone)]
-pub struct GroupInfo {
-    pub signature: Signature,
-    pub files: Vec<usize>,
-}
-
-/// Zusammengefasster Sprachvorschlag über alle Dateien.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AggSuggestion {
-    pub kind: TrackType,
-    pub name: String,
-    pub lang: Lang,
-    pub count: usize,
-}
-
-/// Summen für Vorschau und Statusleiste.
+/// Summen für die Statuszeile.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Summary {
     pub remux: usize,
@@ -300,21 +127,46 @@ pub struct Summary {
 #[derive(Default)]
 pub struct Model {
     pub files: Vec<FileEntry>,
-    pub editor: RuleEditor,
-    pub allow_no_audio: bool,
-    pub overrides: HashMap<Signature, Overrides>,
-    pub reference: Option<Signature>,
-    pub output: OutputSettings,
+    /// Im Reiter „Videos“ markierte Datei (für die Spuranzeige).
+    pub selected: Option<usize>,
+    pub source_path: String,
+    /// Leer = Originale ersetzen.
+    pub destination: String,
+    pub audio: TypeControls,
+    pub subtitles: TypeControls,
+    pub abort_on_errors: bool,
+    pub fallback_dir: bool,
+    pub audio_options: Options,
+    pub subtitle_options: Options,
     /// Parallel zu `files`: Plan, Grund fürs Überspringen, oder `None` (noch nicht eingelesen).
     pub plans: Vec<Option<Result<FilePlan, String>>>,
-    pub groups: Vec<GroupInfo>,
-    pub rule_errors: Vec<String>,
     dirty: bool,
 }
 
 impl Model {
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
+    }
+
+    pub fn selection(&self) -> Selection {
+        Selection {
+            audio: self.audio.to_selection(),
+            subtitles: self.subtitles.to_selection(),
+        }
+    }
+
+    pub fn controls_mut(&mut self, kind: TrackType) -> &mut TypeControls {
+        match kind {
+            TrackType::Subtitles => &mut self.subtitles,
+            _ => &mut self.audio,
+        }
+    }
+
+    pub fn options(&self, kind: TrackType) -> &Options {
+        match kind {
+            TrackType::Subtitles => &self.subtitle_options,
+            _ => &self.audio_options,
+        }
     }
 
     /// Fügt gefundene Dateien hinzu und liefert die neuen Pfade (ohne Duplikate).
@@ -329,10 +181,11 @@ impl Model {
                 found: f,
                 probe: ProbeState::Pending,
                 job: JobState::Idle,
-                selected: false,
+                checked: false,
             });
         }
         self.files.sort_by(|a, b| a.found.path.cmp(&b.found.path));
+        self.selected = None;
         self.dirty = true;
         new
     }
@@ -349,6 +202,7 @@ impl Model {
 
     pub fn remove_where(&mut self, pred: impl Fn(&FileEntry) -> bool) {
         self.files.retain(|e| !pred(e));
+        self.selected = None;
         self.dirty = true;
     }
 
@@ -356,48 +210,30 @@ impl Model {
         self.files.iter().position(|e| e.found.path == path)
     }
 
-    /// Berechnet Pläne und Gruppen neu, wenn sich etwas geändert hat.
+    /// Berechnet Auswahllisten und Pläne neu, wenn sich etwas geändert hat.
     pub fn refresh(&mut self) {
         if !self.dirty {
             return;
         }
         self.dirty = false;
-
-        let mut groups: Vec<GroupInfo> = Vec::new();
-        for (i, e) in self.files.iter().enumerate() {
-            if let Some(m) = e.media() {
-                let sig = m.signature();
-                match groups.iter_mut().find(|g| g.signature == sig) {
-                    Some(g) => g.files.push(i),
-                    None => groups.push(GroupInfo {
-                        signature: sig,
-                        files: vec![i],
-                    }),
-                }
-            }
+        let media: Vec<&MediaInfo> = self.files.iter().filter_map(FileEntry::media).collect();
+        self.audio_options = options(media.iter().copied(), TrackType::Audio);
+        self.subtitle_options = options(media.iter().copied(), TrackType::Subtitles);
+        let (ao, so) = (self.audio_options.clone(), self.subtitle_options.clone());
+        // Erst wenn alle Dateien eingelesen sind, verschwinden nicht mehr vorhandene Einträge.
+        if self
+            .files
+            .iter()
+            .all(|e| !matches!(e.probe, ProbeState::Pending))
+        {
+            self.audio.retain_available(&ao);
+            self.subtitles.retain_available(&so);
         }
-        groups.sort_by_key(|g| std::cmp::Reverse(g.files.len()));
-        self.groups = groups;
-
-        let rules = self.editor.to_rules();
-        self.rule_errors = rules.as_ref().err().cloned().unwrap_or_default();
-        let opts = PlanOptions {
-            reference: self.reference.clone(),
-            allow_no_audio: self.allow_no_audio,
-        };
+        let sel = self.selection();
         self.plans = self
             .files
             .iter()
-            .map(|e| {
-                let m = e.media()?;
-                Some(match &rules {
-                    Ok(r) => {
-                        let ov = self.overrides.get(&m.signature());
-                        plan_file(m, r, ov, &opts).map_err(|e| e.to_string())
-                    }
-                    Err(_) => Err("Regeln fehlerhaft".to_string()),
-                })
-            })
+            .map(|e| Some(plan_file(e.media()?, &sel).map_err(|e| e.to_string())))
             .collect();
     }
 
@@ -419,62 +255,30 @@ impl Model {
         s
     }
 
-    /// Sprachvorschläge aller Dateien, zusammengefasst nach Typ, Name und Sprache.
-    pub fn suggestions(&self) -> Vec<AggSuggestion> {
-        let mut out: Vec<AggSuggestion> = Vec::new();
-        for m in self.files.iter().filter_map(FileEntry::media) {
-            for s in language_suggestions(m) {
-                match out
-                    .iter_mut()
-                    .find(|a| a.kind == s.kind && a.name == s.name && a.lang == s.lang)
-                {
-                    Some(a) => a.count += 1,
-                    None => out.push(AggSuggestion {
-                        kind: s.kind,
-                        name: s.name,
-                        lang: s.lang,
-                        count: 1,
-                    }),
-                }
+    pub fn output_mode(&self) -> OutputMode {
+        let dest = self.destination.trim();
+        if dest.is_empty() {
+            OutputMode::Replace {
+                fallback_dir: self.fallback_dir,
+            }
+        } else {
+            OutputMode::Directory {
+                dir: PathBuf::from(dest),
             }
         }
-        out.sort_by(|a, b| b.count.cmp(&a.count).then(a.name.cmp(&b.name)));
-        out
     }
 
-    /// Übernimmt einen Vorschlag als Regel „Sprache setzen“ (nur für Spuren ohne Sprache).
-    pub fn apply_suggestion(&mut self, s: &AggSuggestion) {
-        let when = suggestion_expr(&s.name);
-        let rows = &mut self.editor.for_type_mut(s.kind).set_language;
-        if !rows.iter().any(|r| r.when == when) {
-            rows.push(AssignRow {
-                when,
-                value: s.lang.iso639_2().to_string(),
-            });
+    pub fn job_options(&self) -> JobOptions {
+        JobOptions {
+            mode: self.output_mode(),
         }
-        self.dirty = true;
     }
 
-    /// Setzt oder entfernt einen Override.
-    pub fn set_override(
-        &mut self,
-        sig: &Signature,
-        position: usize,
-        f: impl FnOnce(&mut TrackOverride),
-    ) {
-        let ov = self.overrides.entry(sig.clone()).or_default();
-        let entry = ov.entry(position).or_default();
-        f(entry);
-        if entry.is_empty() {
-            ov.remove(&position);
-        }
-        if ov.is_empty() {
-            self.overrides.remove(sig);
-        }
-        self.dirty = true;
+    pub fn replaces_originals(&self) -> bool {
+        self.destination.trim().is_empty()
     }
 
-    /// Arbeitsliste für die Ausführung: (Index, Plan) aller Dateien mit etwas zu tun.
+    /// Arbeitsliste: (Index, Plan) aller Dateien mit etwas zu tun.
     pub fn work(&self) -> Vec<(usize, FilePlan)> {
         self.plans
             .iter()
@@ -485,15 +289,6 @@ impl Model {
             })
             .collect()
     }
-}
-
-/// Ausdruck für „Spur ohne Sprache mit genau diesem Namen“.
-pub fn suggestion_expr(name: &str) -> String {
-    let re = format!("(?i)^{}$", regex::escape(name));
-    format!(
-        "Sprache = undefiniert UND Name ~ /{}/",
-        re.replace('/', r"\/")
-    )
 }
 
 pub fn format_size(bytes: u64) -> String {
@@ -514,7 +309,7 @@ pub fn format_size(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use trackwright_core::preset::BUILTIN;
+    use trackwright_core::lang::Lang;
     use trackwright_core::probe::parse_identification;
 
     fn media(name: &str, path: &str) -> MediaInfo {
@@ -527,7 +322,7 @@ mod tests {
         m
     }
 
-    fn model_with(files: &[(&str, &str)]) -> Model {
+    pub fn model_with(files: &[(&str, &str)]) -> Model {
         let mut m = Model::default();
         let found = files
             .iter()
@@ -536,116 +331,89 @@ mod tests {
                 root: PathBuf::from("/media"),
             })
             .collect();
-        let new = m.add_found(found);
-        assert_eq!(new.len(), files.len());
+        assert_eq!(m.add_found(found).len(), files.len());
         for (fixture, p) in files {
             m.set_probe(Path::new(p), Ok(media(fixture, p)));
         }
+        m.refresh();
         m
     }
 
     #[test]
-    fn editor_roundtrip_with_preset() {
-        let preset = Preset::parse(BUILTIN[0].1, Path::new("anime")).expect("preset");
-        let ed = RuleEditor::from_preset(&preset);
-        assert_eq!(ed.to_rules().expect("rules"), preset.rules());
-        assert_eq!(ed.subtitles.default, "keine");
-        assert_eq!(ed.audio.forced, "");
+    fn default_mode_cycles() {
+        let m = DefaultMode::Off;
+        assert_eq!(m.next(), DefaultMode::Default);
+        assert_eq!(m.next().next(), DefaultMode::DefaultForced);
+        assert_eq!(m.next().next().next(), DefaultMode::Off);
     }
 
     #[test]
-    fn editor_reports_errors() {
-        let mut ed = RuleEditor::default();
-        ed.audio.keep = "Nr.".into();
-        ed.subtitles.set_language.push(AssignRow {
-            when: "Nr. 1".into(),
-            value: String::new(),
-        });
-        let errs = ed.to_rules().expect_err("fehler");
-        assert_eq!(errs.len(), 2, "{errs:?}");
-        assert!(expr_error("Nr. 1").is_none());
-        assert!(expr_error("").is_none());
-        assert!(flag_error("keine").is_none());
-        assert!(flag_error("Nr. x").is_some());
+    fn controls_to_selection() {
+        let mut c = TypeControls::default();
+        assert!(c.to_selection().is_inactive());
+        c.keep.insert(TrackRef::Number(1));
+        assert_eq!(c.to_selection().keep, None, "Checkbox aus = alle behalten");
+        c.keep_enabled = true;
+        c.default_mode = DefaultMode::DefaultForced;
+        c.default_ref = Some(TrackRef::Number(1));
+        let s = c.to_selection();
+        assert_eq!(s.keep.map(|k| k.len()), Some(1));
+        assert_eq!(
+            s.default,
+            DefaultChoice::DefaultForced(Some(TrackRef::Number(1)))
+        );
     }
 
     #[test]
-    fn plans_groups_and_summary() {
+    fn plans_follow_controls() {
         let mut m = model_with(&[
             ("full.json", "/media/a.mkv"),
             ("full.json", "/media/b.mkv"),
             ("und.json", "/media/c.mkv"),
         ]);
-        m.editor = RuleEditor::from_preset(
-            &Preset::parse(BUILTIN[0].1, Path::new("anime")).expect("preset"),
-        );
+        assert_eq!(m.summary().nothing, 3);
+        assert_eq!(m.audio_options.numbers.len(), 3);
+
+        m.audio.keep_enabled = true;
+        m.audio.keep.insert(TrackRef::Lang(Lang::parse("ger")));
+        m.audio.keep.insert(TrackRef::Lang(Lang::parse("jpn")));
         m.mark_dirty();
         m.refresh();
-        assert_eq!(m.groups.len(), 2);
-        assert_eq!(m.groups[0].files, vec![0, 1]);
         let s = m.summary();
-        assert_eq!(
-            (s.remux, s.skipped),
-            (2, 1),
-            "und.json: keine Audiospur bliebe"
-        );
+        assert_eq!((s.remux, s.skipped), (2, 1), "c.mkv hat kein ger/jpn");
         assert_eq!(s.write_bytes, 4_000_000_000);
         assert_eq!(m.work().len(), 2);
-
-        // Vorschlag übernehmen → c.mkv wird planbar.
-        let sugg = m.suggestions();
-        assert!(
-            sugg.iter()
-                .any(|s| s.name == "Deutsch" && s.kind == TrackType::Audio)
-        );
-        for s in sugg {
-            m.apply_suggestion(&s);
-        }
-        m.refresh();
-        let plan_c = m.plans[2].as_ref().expect("probed").as_ref().expect("plan");
-        assert!(plan_c.kept().any(|t| t.kind == TrackType::Audio));
-        assert!(m.rule_errors.is_empty(), "{:?}", m.rule_errors);
+        let err = m.plans[2].clone().expect("probed").expect_err("skip");
+        assert!(err.contains("nicht vorhanden"), "{err}");
     }
 
     #[test]
-    fn overrides_and_reference() {
+    fn vanished_options_are_dropped() {
         let mut m = model_with(&[("full.json", "/media/a.mkv"), ("und.json", "/media/c.mkv")]);
+        m.audio.keep_enabled = true;
+        m.audio.keep.insert(TrackRef::Number(3));
+        m.audio.default_ref = Some(TrackRef::Name("Kommentar".into()));
+        m.remove_where(|e| e.name() == "a.mkv");
         m.refresh();
-        let sig = m.files[0].media().expect("media").signature();
-        m.set_override(&sig, 3, |o| o.keep = Some(false));
-        m.refresh();
-        let plan = m.plans[0].as_ref().expect("p").as_ref().expect("plan");
-        assert!(!plan.tracks[3].keep);
-        assert_eq!(plan.strategy, Strategy::Remux);
-        // Override zurücknehmen entfernt den Eintrag.
-        m.set_override(&sig, 3, |o| o.keep = None);
-        assert!(m.overrides.is_empty());
-
-        m.reference = Some(sig);
-        m.mark_dirty();
-        m.refresh();
-        assert!(m.plans[1].as_ref().expect("p").is_err());
+        assert!(m.audio.keep.is_empty(), "Nr. 3 gibt es nicht mehr");
+        assert_eq!(m.audio.default_ref, None);
     }
 
     #[test]
-    fn suggestion_expression_is_valid_and_exact() {
-        for name in ["Deutsch", "a/b (GER) [x]", "日本語"] {
-            let src = suggestion_expr(name);
-            assert!(expr_error(&src).is_none(), "{src}");
-        }
-    }
-
-    #[test]
-    fn output_settings() {
-        let mut o = OutputSettings::default();
-        assert!(o.mode().is_ok());
-        o.kind = ModeKind::Directory;
-        assert!(o.mode().is_err());
-        o.out_dir = Some("/out".into());
-        assert!(matches!(o.mode(), Ok(OutputMode::Directory { .. })));
-        o.kind = ModeKind::Beside;
-        o.suffix = String::new();
-        assert!(o.mode().is_err());
+    fn output_mode_from_destination() {
+        let mut m = Model::default();
+        assert!(m.replaces_originals());
+        assert_eq!(
+            m.output_mode(),
+            OutputMode::Replace {
+                fallback_dir: false
+            }
+        );
+        m.destination = " /out ".into();
+        assert_eq!(
+            m.output_mode(),
+            OutputMode::Directory { dir: "/out".into() }
+        );
         assert_eq!(format_size(1_500_000_000), "1.5 GB");
         assert_eq!(format_size(12), "12 B");
     }
