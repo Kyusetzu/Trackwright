@@ -6,6 +6,7 @@
 
 pub mod command;
 pub mod engine;
+pub mod env;
 pub mod error;
 pub mod exec;
 pub mod fsutil;
@@ -13,6 +14,7 @@ pub mod job;
 pub mod lang;
 pub mod model;
 pub mod plan;
+pub mod preset;
 pub mod probe;
 pub mod rules;
 pub mod tools;

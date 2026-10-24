@@ -3717,6 +3717,7 @@ dependencies = [
  "clap",
  "ctrlc",
  "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
  "trackwright-core",

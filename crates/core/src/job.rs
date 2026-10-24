@@ -104,6 +104,26 @@ pub fn output_path(source: &Path, root: Option<&Path>, mode: &OutputMode) -> Res
     }
 }
 
+/// Die Programmaufrufe, die [`run_job`] für diesen Plan ausführen würde (Trockenlauf).
+///
+/// Bei „propedit, aber nicht ersetzen“ kopiert Trackwright die Datei vorher in die tmp-Datei;
+/// diese Kopie ist kein Programmaufruf und erscheint daher nicht.
+pub fn planned_commands(
+    plan: &FilePlan,
+    root: Option<&Path>,
+    mode: &OutputMode,
+) -> Result<Vec<ToolCommand>> {
+    let target = output_path(&plan.path, root, mode)?;
+    let replace = matches!(mode, OutputMode::Replace { .. });
+    let tmp = tmp_path(&plan.path, &target);
+    Ok(match plan.strategy {
+        Strategy::Nothing => Vec::new(),
+        Strategy::Propedit if replace => propedit_command(plan, &plan.path).into_iter().collect(),
+        Strategy::Propedit => propedit_command(plan, &tmp).into_iter().collect(),
+        Strategy::Remux => vec![remux_command(plan, &tmp)],
+    })
+}
+
 fn same_file(a: &Path, b: &Path) -> bool {
     match (a.canonicalize(), b.canonicalize()) {
         (Ok(a), Ok(b)) => a == b,
@@ -189,7 +209,7 @@ pub fn run_job(
             report.output = Some(source.clone());
         }
         (Strategy::Propedit, false) => {
-            let tmp = prepare_tmp(&target)?;
+            let tmp = prepare_tmp(source, &target)?;
             let result = (|| {
                 on_event(JobEvent::Log(format!("kopiere nach {}", tmp.display())));
                 copy_with_cancel(source, &tmp, cancel, on_event)?;
@@ -205,7 +225,7 @@ pub fn run_job(
             if replace {
                 check_original_can_move(source, &opts.mode)?;
             }
-            let tmp = prepare_tmp(&target)?;
+            let tmp = prepare_tmp(source, &target)?;
             let cmd = remux_command(plan, &tmp);
             let result = run_tool(&cmd, tools, cancel, on_event, &mut report).map(|_| ());
             if replace {
@@ -250,12 +270,22 @@ fn describe_location(loc: &OriginalLocation) -> String {
     }
 }
 
-fn prepare_tmp(target: &Path) -> Result<PathBuf> {
+/// tmp-Datei: `<Quellname>.trackwright.tmp.mkv` im Zielverzeichnis (gleiches Dateisystem wie
+/// das Ziel, damit `rename` atomar ist).
+fn tmp_path(source: &Path, target: &Path) -> PathBuf {
+    target.with_file_name(
+        with_suffix(source, TMP_SUFFIX)
+            .file_name()
+            .unwrap_or_default(),
+    )
+}
+
+fn prepare_tmp(source: &Path, target: &Path) -> Result<PathBuf> {
     let dir = target
         .parent()
         .ok_or_else(|| Error::Unsafe(format!("{}: kein Verzeichnis", target.display())))?;
     std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-    let tmp = with_suffix(target, TMP_SUFFIX);
+    let tmp = tmp_path(source, target);
     // Reste eines abgebrochenen Laufs gehören uns.
     remove_quietly(&tmp);
     Ok(tmp)
@@ -298,7 +328,13 @@ fn verify_tmp(
         Err(e) => Some(vec![e.to_string()]),
     };
     if let Some(problems) = problems {
-        let failed = free_path(&with_suffix(target, FAILED_SUFFIX));
+        let failed = free_path(
+            &target.with_file_name(
+                with_suffix(&plan.path, FAILED_SUFFIX)
+                    .file_name()
+                    .unwrap_or_default(),
+            ),
+        );
         let kept = std::fs::rename(tmp, &failed).is_ok();
         let msg = problems.join("; ");
         on_event(JobEvent::Log(format!("Prüfung fehlgeschlagen: {msg}")));

@@ -36,6 +36,9 @@ pub type Overrides = BTreeMap<usize, TrackOverride>;
 pub struct PlanOptions {
     /// Nur Dateien mit dieser Spursignatur planen (Referenzdatei).
     pub reference: Option<Signature>,
+    /// Dateien bearbeiten, bei denen keine Audiospur übrig bliebe. Standard: überspringen, weil
+    /// das fast immer ein Regelfehler ist (z. B. Sprachregel bei undefinierten Spuren).
+    pub allow_no_audio: bool,
 }
 
 /// Grund, warum eine Datei übersprungen wird.
@@ -51,6 +54,11 @@ pub enum PlanIssue {
     },
     #[error("Spuraufbau weicht von der Referenzdatei ab – Datei wird übersprungen")]
     SignatureMismatch,
+    #[error(
+        "keine Audiospur bliebe übrig – Datei wird übersprungen{}",
+        if *undefined { " (Spuren ohne Sprache: zuerst Sprache setzen)" } else { "" }
+    )]
+    NoAudioLeft { undefined: bool },
 }
 
 fn join_refs(refs: &[MissingRef]) -> String {
@@ -230,6 +238,19 @@ pub fn plan_file(
     // Entfernte Spuren behalten ihren Ausgangszustand (nur Anzeige).
     for t in tracks.iter_mut().filter(|t| !t.keep) {
         t.after = t.before.clone();
+    }
+
+    let audio_total = tracks.iter().filter(|t| t.kind == TrackType::Audio).count();
+    let audio_kept = tracks
+        .iter()
+        .filter(|t| t.kind == TrackType::Audio && t.keep)
+        .count();
+    if audio_total > 0 && audio_kept == 0 && !opts.allow_no_audio {
+        return Err(PlanIssue::NoAudioLeft {
+            undefined: media
+                .tracks_of(TrackType::Audio)
+                .any(|t| t.lang().is_undefined()),
+        });
     }
 
     let mut warnings = Vec::new();
@@ -521,13 +542,16 @@ mod tests {
     fn undefined_language_never_matches_a_language() {
         let m = media("und.json");
         // Weder „Sprache = ger“ noch „Sprache != ger“ dürfen undefinierte Spuren als ger zählen.
-        let p = plan_file(
-            &m,
-            &rules(keep("Sprache = ger"), keep("Sprache in {ger, eng}")),
-            None,
-            &PlanOptions::default(),
-        )
-        .expect("plan");
+        let r = rules(keep("Sprache = ger"), keep("Sprache in {ger, eng}"));
+        assert_eq!(
+            plan_file(&m, &r, None, &PlanOptions::default()),
+            Err(PlanIssue::NoAudioLeft { undefined: true })
+        );
+        let allow = PlanOptions {
+            allow_no_audio: true,
+            ..Default::default()
+        };
+        let p = plan_file(&m, &r, None, &allow).expect("plan");
         assert_eq!(summary(&p, TrackType::Audio), "- -");
         assert_eq!(summary(&p, TrackType::Subtitles), "- -");
         assert!(p.warnings.iter().any(|w| w.contains("Audio")));
@@ -673,6 +697,7 @@ mod tests {
         let und = media("und.json");
         let opts = PlanOptions {
             reference: Some(full.signature()),
+            ..Default::default()
         };
         assert!(plan_file(&full, &RuleSet::default(), None, &opts).is_ok());
         assert_eq!(
