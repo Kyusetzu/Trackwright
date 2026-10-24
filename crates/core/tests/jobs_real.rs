@@ -121,6 +121,11 @@ fn flags_only_in_place() {
         report.original_moved_to.is_none(),
         "kein Remux, kein Papierkorb"
     );
+    assert_eq!(report.size_before, media.size);
+    assert_eq!(
+        report.size_after,
+        Some(std::fs::metadata(&path).expect("metadata").len())
+    );
 
     let after = probe(&tools, &path).expect("probe");
     assert_eq!(
@@ -168,6 +173,12 @@ fn remux_into_destination_with_flags() {
     .expect("job");
     let out = report.output.expect("output");
     assert_eq!(out, out_dir.join("Serie – Folge (2) [x].mkv"));
+    let after = report.size_after.expect("size_after");
+    assert_eq!(after, std::fs::metadata(&out).expect("metadata").len());
+    assert!(
+        after < report.size_before,
+        "Spuren entfernt → Datei kleiner"
+    );
     assert_eq!(progress.last(), Some(&100));
 
     let result = probe(&tools, &out).expect("probe");

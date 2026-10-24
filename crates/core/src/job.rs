@@ -61,6 +61,10 @@ pub struct JobReport {
     /// Wohin das Original verschoben wurde (Modus „ersetzen“).
     pub original_moved_to: Option<OriginalLocation>,
     pub unchanged: bool,
+    /// Größe der Quelldatei vor der Bearbeitung.
+    pub size_before: u64,
+    /// Größe der Ergebnisdatei (`None`, wenn nichts geschrieben wurde).
+    pub size_after: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,6 +175,7 @@ pub fn run_job(
     let source = &plan.path;
     let mut report = JobReport {
         source: source.clone(),
+        size_before: media.size,
         ..Default::default()
     };
     if cancel.load(Ordering::Relaxed) {
@@ -243,6 +248,11 @@ pub fn run_job(
         // Bereits oben behandelt.
         (Strategy::Nothing, _) => {}
     }
+    report.size_after = report
+        .output
+        .as_deref()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len());
     on_event(JobEvent::Progress(100));
     Ok(report)
 }

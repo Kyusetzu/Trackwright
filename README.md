@@ -30,7 +30,9 @@ Danach startest du die App über das Startmenü („Trackwright“) oder mit
 ### Reiter „Videos“
 
 - **Quellordner** eingeben (Enter) oder über *Durchsuchen …* wählen; alle `*.mkv` darin werden
-  rekursiv geladen. *Dateien hinzufügen …* und Drag & Drop funktionieren ebenfalls.
+  rekursiv geladen. *Dateien hinzufügen …* und Drag & Drop funktionieren ebenfalls. Für Drag & Drop
+  läuft die GUI unter Wayland über XWayland (winit kann unter Wayland keine Datei-Drops);
+  `TRACKWRIGHT_WAYLAND=1` erzwingt natives Wayland ohne Drag & Drop.
 - Die Liste zeigt Name, Größe und Spuranzahl (V/A/U). ⚠ markiert Dateien mit Spuren ohne Sprache.
 - Ein Klick auf eine Datei zeigt darunter ihre Spuren: ID, Typ, Nummer, Sprache, Codec, Kanäle,
   Name, Standard, Forced.
@@ -60,7 +62,8 @@ Spur ohne Sprache zählt nur für den Eintrag „undefiniert“, nie für eine e
 werden normalisiert: `ger` = `deu` = `de`.
 
 *Starten* arbeitet die Warteschlange nacheinander ab, mit Fortschritt pro Datei und gesamt sowie
-Log; *Abbrechen* beendet den laufenden Prozess sofort.
+Log; *Abbrechen* beendet den laufenden Prozess sofort. Jede fertige Datei zeigt ihre Größe vorher → nachher; die
+Statuszeile und das Log nennen die Summe des Laufs.
 
 ## Datensicherheit
 

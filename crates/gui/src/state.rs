@@ -307,6 +307,21 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
+/// „1.5 GB → 1.2 GB (−20 %)“
+pub fn format_size_change(before: u64, after: u64) -> String {
+    let change = if before == 0 {
+        String::new()
+    } else {
+        let pct = (after as f64 - before as f64) / before as f64 * 100.0;
+        if pct.abs() < 0.05 {
+            " (±0 %)".to_string()
+        } else {
+            format!(" ({}{:.1} %)", if pct < 0.0 { "−" } else { "+" }, pct.abs())
+        }
+    };
+    format!("{} → {}{change}", format_size(before), format_size(after))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -417,5 +432,12 @@ mod tests {
         );
         assert_eq!(format_size(1_500_000_000), "1.5 GB");
         assert_eq!(format_size(12), "12 B");
+        assert_eq!(
+            format_size_change(2_000_000_000, 1_500_000_000),
+            "2.0 GB → 1.5 GB (−25.0 %)"
+        );
+        assert_eq!(format_size_change(1000, 1100), "1.0 KB → 1.1 KB (+10.0 %)");
+        assert_eq!(format_size_change(1000, 1000), "1.0 KB → 1.0 KB (±0 %)");
+        assert_eq!(format_size_change(0, 0), "0 B → 0 B");
     }
 }

@@ -1,6 +1,8 @@
 //! Hauptfenster nach dem Vorbild mkv-muxing-batch-gui: Reiter „Videos“ und „Mux-Einstellungen“.
 
-use crate::state::{DefaultMode, JobState, Model, ProbeState, TypeControls, format_size};
+use crate::state::{
+    DefaultMode, JobState, Model, ProbeState, TypeControls, format_size, format_size_change,
+};
 use crate::strings as s;
 use crate::worker::{JobMsg, Msg, Pick, WorkItem, Worker};
 use egui::containers::PopupCloseBehavior;
@@ -27,6 +29,15 @@ struct Running {
     cancel: Arc<AtomicBool>,
     total: usize,
     done: usize,
+    sizes: SizeTotals,
+}
+
+/// Summe der Dateigrößen vorher/nachher über alle geschriebenen Dateien eines Laufs.
+#[derive(Clone, Copy, Default)]
+struct SizeTotals {
+    before: u64,
+    after: u64,
+    files: usize,
 }
 
 const RED: Color32 = Color32::from_rgb(0xE0, 0x5A, 0x5A);
@@ -43,6 +54,7 @@ pub struct App {
     running: Option<Running>,
     notice: Option<String>,
     confirm_replace: bool,
+    last_run_sizes: Option<SizeTotals>,
 }
 
 impl App {
@@ -66,6 +78,7 @@ impl App {
             running: None,
             notice: None,
             confirm_replace: false,
+            last_run_sizes: None,
         }
     }
 
@@ -138,7 +151,17 @@ impl App {
                 } else {
                     "■ Fertig".to_string()
                 });
-                self.running = None;
+                if let Some(sizes) = self.running.take().map(|r| r.sizes)
+                    && sizes.files > 0
+                {
+                    self.log(format!(
+                        "  {}: {} ({} Dateien)",
+                        s::SIZE_TOTAL,
+                        format_size_change(sizes.before, sizes.after),
+                        sizes.files
+                    ));
+                    self.last_run_sizes = Some(sizes);
+                }
             }
         }
     }
@@ -185,6 +208,17 @@ impl App {
                                 text.push_str(&format!(" (Original: {})", p.display()))
                             }
                             None => {}
+                        }
+                        if let Some(after) = report.size_after {
+                            text.push_str(&format!(
+                                " · {}",
+                                format_size_change(report.size_before, after)
+                            ));
+                            if let Some(r) = &mut self.running {
+                                r.sizes.before += report.size_before;
+                                r.sizes.after += after;
+                                r.sizes.files += 1;
+                            }
                         }
                         for w in &report.warnings {
                             self.log(format!("  Warnung: {w}"));
@@ -250,7 +284,9 @@ impl App {
             cancel: cancel.clone(),
             total: items.len(),
             done: 0,
+            sizes: SizeTotals::default(),
         });
+        self.last_run_sizes = None;
         self.worker.run(
             items,
             self.model.job_options(),
@@ -295,11 +331,25 @@ impl App {
         });
 
         if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
-            egui::Area::new(egui::Id::unique("trackwright-drop-overlay"))
-                .fixed_pos(egui::pos2(24.0, 80.0))
-                .show(&ctx, |ui| {
-                    ui.label(RichText::new(s::DROP_HINT).size(22.0).strong());
-                });
+            let screen = ctx.content_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::unique("trackwright-drop-overlay"),
+            ));
+            painter.rect_filled(screen, 0.0, Color32::from_black_alpha(170));
+            painter.rect_stroke(
+                screen.shrink(12.0),
+                8.0,
+                egui::Stroke::new(3.0, GREEN),
+                egui::StrokeKind::Inside,
+            );
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                s::DROP_HINT,
+                egui::FontId::proportional(26.0),
+                Color32::WHITE,
+            );
         }
         self.dialogs(&ctx);
         if self.running.is_some() {
@@ -379,6 +429,27 @@ impl App {
                 sum.nothing,
                 sum.skipped
             ));
+            let sizes = self
+                .running
+                .as_ref()
+                .map(|r| r.sizes)
+                .filter(|t| t.files > 0)
+                .or(self.last_run_sizes);
+            if let Some(t) = sizes {
+                ui.separator();
+                let saved = t.before.saturating_sub(t.after);
+                let text = format!(
+                    "{}: {}",
+                    s::SIZE_TOTAL,
+                    format_size_change(t.before, t.after)
+                );
+                ui.label(text).on_hover_text(format!(
+                    "{} Dateien, {} {}",
+                    t.files,
+                    format_size(saved),
+                    s::SIZE_SAVED
+                ));
+            }
         });
     }
 

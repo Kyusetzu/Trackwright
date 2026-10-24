@@ -17,6 +17,21 @@ impl eframe::App for GuiApp {
     }
 }
 
+/// winit 0.30 liefert unter Wayland keine Datei-Drops (nur X11). Deshalb läuft die GUI
+/// standardmäßig über XWayland, damit Drag & Drop funktioniert. `TRACKWRIGHT_WAYLAND=1`
+/// erzwingt das native Wayland-Backend (ohne Drag & Drop).
+#[cfg(target_os = "linux")]
+fn prefer_x11(builder: &mut eframe::EventLoopBuilder<eframe::UserEvent>) {
+    use winit::platform::x11::EventLoopBuilderExtX11;
+    let native_wayland = std::env::var_os("TRACKWRIGHT_WAYLAND").is_some_and(|v| v != "0");
+    if !native_wayland && std::env::var_os("DISPLAY").is_some() {
+        builder.with_x11();
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prefer_x11(_: &mut eframe::EventLoopBuilder<eframe::UserEvent>) {}
+
 fn main() -> eframe::Result {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
@@ -30,6 +45,7 @@ fn main() -> eframe::Result {
             .with_inner_size([1200.0, 800.0])
             .with_min_inner_size([800.0, 500.0])
             .with_drag_and_drop(true),
+        event_loop_builder: Some(Box::new(prefer_x11)),
         ..Default::default()
     };
     eframe::run_native(
