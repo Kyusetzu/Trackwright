@@ -184,10 +184,7 @@ pub fn run_job(
     let target = output_path(source, root, &opts.mode)?;
     let replace = matches!(opts.mode, OutputMode::Replace { .. });
     if !replace && target.exists() {
-        return Err(Error::Unsafe(format!(
-            "Ziel existiert bereits: {}",
-            target.display()
-        )));
+        return Err(Error::TargetExists(target));
     }
 
     match (plan.strategy, replace) {

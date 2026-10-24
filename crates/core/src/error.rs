@@ -30,6 +30,8 @@ pub enum Error {
     },
     #[error("abgebrochen")]
     Cancelled,
+    #[error("Ziel existiert bereits: {}", .0.display())]
+    TargetExists(PathBuf),
     #[error("{program} meldet einen Fehler (Exit-Code {code}): {message}")]
     ToolFailed {
         program: String,

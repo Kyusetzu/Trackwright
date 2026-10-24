@@ -71,8 +71,11 @@ Log; *Abbrechen* beendet den laufenden Prozess sofort.
 
 1. Ein Original wird nie direkt überschrieben. Beim Ersetzen wandert es erst nach erfolgreicher
    Prüfung in den Papierkorb, dann ersetzt das Ergebnis es per atomarem `rename`.
-2. **Prüfung** mit `mkvmerge -J`: Spuren, Sprachen, Namen, Standard/Forced, Dauer (< 1 s
-   Abweichung), Größe > 0, Anhänge und Kapitel. Bei Abweichung bleibt das Ergebnis als
+2. **Prüfung** mit `mkvmerge -J`: Spuren, Sprachen, Namen, Standard/Forced, Größe > 0, Anhänge
+   und Kapitel. Dauer: Ohne entfernte Spuren gilt < 1 s Abweichung. Werden Spuren entfernt, darf
+   die Datei bis max(5 s, 1 %) kürzer werden, denn die Containerdauer ist das Ende der längsten
+   Spur, und eine entfernte Audio- oder Untertitelspur läuft oft ein paar Sekunden länger als das
+   Video. Länger werden darf sie nie. Bei Abweichung bleibt das Ergebnis als
    `<Name>.failed.mkv` liegen, das Original ist unangetastet.
 3. Fehler (z. B. voller Datenträger) oder Abbruch: Der Prozess wird beendet, die tmp-Datei
    gelöscht, das Original bleibt unangetastet. Exit-Code 1 (Warnungen) gilt als Erfolg.

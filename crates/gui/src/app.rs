@@ -155,6 +155,13 @@ impl App {
             }
             JobMsg::Progress(p) => self.model.files[i].job = JobState::Running(p),
             JobMsg::Log(l) => self.log(format!("  {l}")),
+            JobMsg::Skipped(reason) => {
+                if let Some(r) = &mut self.running {
+                    r.done += 1;
+                }
+                self.log(format!("– {name}: übersprungen ({reason})"));
+                self.model.files[i].job = JobState::Skipped(reason);
+            }
             JobMsg::Done(result) => {
                 if let Some(r) = &mut self.running {
                     r.done += 1;
@@ -970,6 +977,9 @@ fn job_status(ui: &mut egui::Ui, job: &JobState) {
         }
         JobState::Failed(err) => {
             ui.colored_label(RED, "✗ fehlgeschlagen").on_hover_text(err);
+        }
+        JobState::Skipped(reason) => {
+            ui.weak("übersprungen").on_hover_text(reason);
         }
         JobState::Cancelled => {
             ui.weak("abgebrochen");

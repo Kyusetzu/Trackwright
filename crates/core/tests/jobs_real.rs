@@ -192,7 +192,7 @@ fn remux_into_destination_with_flags() {
 
     // Zweiter Lauf: Ziel existiert → abgelehnt, bevor etwas passiert.
     let err = run(&tools, &media, &plan, None, &into_dir(&out_dir)).expect_err("existiert");
-    assert!(matches!(err, Error::Unsafe(_)), "{err}");
+    assert!(matches!(err, Error::TargetExists(_)), "{err}");
 }
 
 #[test]
@@ -459,4 +459,45 @@ fn warnings_exit_code_counts_as_success() {
     let report = run(&tools, &media, &plan, None, &into_dir(&out_dir)).expect("job");
     assert_eq!(report.warnings, vec!["Ein Hinweis".to_string()]);
     assert!(out_dir.join("warn.mkv").exists());
+}
+
+#[test]
+fn removing_a_longer_track_shortens_the_file_and_passes() {
+    // Realer Fall: Eine Spur läuft länger als der Rest. Wird sie entfernt, wird die Datei
+    // legitim kürzer (vorher: „Dauer weicht ab: 1420.095 s statt 1422.000 s“).
+    let (dir, base) = require!(common::copy_fixture("full.mkv", "basis.mkv"));
+    let srt = dir.path().join("lang.srt");
+    std::fs::write(&srt, "1\n00:00:06,000 --> 00:00:07,500\nNachspann\n").expect("srt");
+    let path = dir.path().join("lang.mkv");
+    let status = std::process::Command::new("mkvmerge")
+        .env("LC_ALL", "C.UTF-8")
+        .arg("-q")
+        .arg("-o")
+        .arg(&path)
+        .arg(&base)
+        .args(["--language", "0:fre"])
+        .arg(&srt)
+        .status()
+        .expect("mkvmerge");
+    assert!(status.code().is_some_and(|c| c <= 1), "mkvmerge: {status}");
+    let tools = Tools::default();
+    let media = probe(&tools, &path).expect("probe");
+    assert!(media.duration_ns.expect("dauer") >= 7_000_000_000);
+
+    let sel = Selection {
+        subtitles: TypeSelection {
+            keep: keep(&[lang("ger"), lang("eng")]),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let plan = plan_file(&media, &sel).expect("plan");
+    assert_eq!(plan.removed_count(), 1);
+    let out_dir = dir.path().join("Ziel");
+    let report = run(&tools, &media, &plan, None, &into_dir(&out_dir)).expect("job");
+    let result = probe(&tools, &report.output.expect("out")).expect("probe");
+    assert!(
+        result.duration_ns.expect("dauer") < 6_000_000_000,
+        "Datei ist kürzer geworden"
+    );
 }

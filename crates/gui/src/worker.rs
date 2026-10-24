@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
+use trackwright_core::error::Error;
 use trackwright_core::fsutil::{FoundFile, collect_mkv};
 use trackwright_core::job::{JobEvent, JobOptions, JobReport, run_job};
 use trackwright_core::model::MediaInfo;
@@ -26,6 +27,8 @@ pub enum JobMsg {
     Progress(u8),
     Log(String),
     Done(Result<JobReport, String>),
+    /// Übersprungen, kein Fehler (z. B. Ziel existiert bereits).
+    Skipped(String),
 }
 
 #[derive(Debug)]
@@ -191,11 +194,14 @@ impl Worker {
                 JobEvent::Progress(_) => {}
             },
         );
-        let ok = result.is_ok();
-        self.send(Msg::Job {
-            path,
-            msg: JobMsg::Done(result.map_err(|e| e.to_string())),
-        });
+        let (ok, msg) = match result {
+            Err(e @ Error::TargetExists(_)) => (true, JobMsg::Skipped(e.to_string())),
+            other => (
+                other.is_ok(),
+                JobMsg::Done(other.map_err(|e| e.to_string())),
+            ),
+        };
+        self.send(Msg::Job { path, msg });
         ok
     }
 }

@@ -26,6 +26,7 @@ pub enum JobState {
     Running(u8),
     Done(String),
     Failed(String),
+    Skipped(String),
     Cancelled,
 }
 
