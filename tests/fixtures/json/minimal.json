@@ -1,0 +1,8 @@
+{
+  "container": { "recognized": true, "supported": true, "type": "Matroska" },
+  "tracks": [
+    { "id": 0, "type": "video", "codec": "AVC/H.264/MPEG-4p10" },
+    { "id": 1, "type": "audio", "codec": "AAC", "properties": {} },
+    { "id": 2, "type": "subtitles", "codec": "SubRip/SRT", "properties": { "language": "ger", "default_track": false } }
+  ]
+}
