@@ -3,6 +3,7 @@
 //! Aufruf: `trackwright-gui [DATEIEN|ORDNER …]`
 
 mod app;
+mod settings;
 mod state;
 mod strings;
 mod worker;
@@ -53,6 +54,9 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let mut app = app::App::new(cc.egui_ctx.clone(), Tools::default());
+            if let Some(path) = settings::Settings::default_path() {
+                app.apply_settings(settings::Settings::load(&path));
+            }
             if let [dir] = initial.as_slice()
                 && dir.is_dir()
             {

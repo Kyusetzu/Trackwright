@@ -1,7 +1,9 @@
 //! Hauptfenster nach dem Vorbild mkv-muxing-batch-gui: Reiter „Videos“ und „Mux-Einstellungen“.
 
+use crate::settings::Settings;
 use crate::state::{
-    DefaultMode, JobState, Model, ProbeState, TypeControls, format_size, format_size_change,
+    DefaultMode, JobState, Model, ProbeState, TypeControls, format_percent_change, format_size,
+    format_size_change,
 };
 use crate::strings as s;
 use crate::worker::{JobMsg, Msg, Pick, WorkItem, Worker};
@@ -55,6 +57,9 @@ pub struct App {
     notice: Option<String>,
     confirm_replace: bool,
     last_run_sizes: Option<SizeTotals>,
+    settings: Settings,
+    /// Offenes Einstellungsfenster mit dem bearbeiteten Entwurf.
+    settings_draft: Option<Settings>,
 }
 
 impl App {
@@ -79,7 +84,16 @@ impl App {
             notice: None,
             confirm_replace: false,
             last_run_sizes: None,
+            settings: Settings::default(),
+            settings_draft: None,
         }
+    }
+
+    /// Übernimmt gespeicherte Einstellungen; ein fester Ausgabeordner wird Zielordner.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        self.model.destination = settings.output_dir.clone();
+        self.model.mark_dirty();
+        self.settings = settings;
     }
 
     pub fn add_paths(&mut self, paths: Vec<PathBuf>) {
@@ -136,6 +150,12 @@ impl App {
                         self.model.mark_dirty();
                     }
                 }
+                Pick::SettingsOutputDir => {
+                    if let (Some(p), Some(d)) = (paths.into_iter().next(), &mut self.settings_draft)
+                    {
+                        d.output_dir = p.display().to_string();
+                    }
+                }
             },
             Msg::Job { path, msg } => self.handle_job(&path, msg),
             Msg::RunFinished { cancelled, aborted } => {
@@ -174,6 +194,7 @@ impl App {
         match msg {
             JobMsg::Started => {
                 self.model.files[i].job = JobState::Running(0);
+                self.model.files[i].size_change = None;
                 self.log(format!("▶ {name}"));
             }
             JobMsg::Progress(p) => self.model.files[i].job = JobState::Running(p),
@@ -195,25 +216,33 @@ impl App {
                     .is_some_and(|r| r.cancel.load(Ordering::Relaxed));
                 match result {
                     Ok(report) => {
-                        let mut text = match &report.output {
-                            Some(out) if out == path => "fertig".to_string(),
-                            Some(out) => format!("fertig → {}", out.display()),
-                            None => "unverändert".to_string(),
+                        // Status in der Liste ohne Pfade; das Log bekommt die Details.
+                        let (mut status, mut log) = match &report.output {
+                            Some(out) if out == path => {
+                                ("fertig".to_string(), "fertig".to_string())
+                            }
+                            Some(out) => {
+                                ("fertig".to_string(), format!("fertig → {}", out.display()))
+                            }
+                            None => ("unverändert".to_string(), "unverändert".to_string()),
                         };
                         match &report.original_moved_to {
                             Some(OriginalLocation::Trash) => {
-                                text.push_str(" (Original im Papierkorb)")
+                                status.push_str(" (Original im Papierkorb)");
+                                log.push_str(" (Original im Papierkorb)");
                             }
                             Some(OriginalLocation::Folder(p)) => {
-                                text.push_str(&format!(" (Original: {})", p.display()))
+                                status.push_str(" (Original verschoben)");
+                                log.push_str(&format!(" (Original: {})", p.display()));
                             }
                             None => {}
                         }
                         if let Some(after) = report.size_after {
-                            text.push_str(&format!(
+                            log.push_str(&format!(
                                 " · {}",
                                 format_size_change(report.size_before, after)
                             ));
+                            self.model.files[i].size_change = Some((report.size_before, after));
                             if let Some(r) = &mut self.running {
                                 r.sizes.before += report.size_before;
                                 r.sizes.after += after;
@@ -223,8 +252,8 @@ impl App {
                         for w in &report.warnings {
                             self.log(format!("  Warnung: {w}"));
                         }
-                        self.log(format!("✓ {name}: {text}"));
-                        self.model.files[i].job = JobState::Done(text);
+                        self.log(format!("✓ {name}: {log}"));
+                        self.model.files[i].job = JobState::Done(status);
                         if report.output.as_deref() == Some(path) {
                             // Datei hat sich geändert → neu einlesen.
                             self.worker.probe(vec![path.to_path_buf()], true);
@@ -321,6 +350,11 @@ impl App {
                 ui.separator();
                 ui.selectable_value(&mut self.tab, Tab::Videos, s::TAB_VIDEOS);
                 ui.selectable_value(&mut self.tab, Tab::Mux, s::TAB_MUX);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(s::SETTINGS_BUTTON).clicked() && self.settings_draft.is_none() {
+                        self.settings_draft = Some(self.settings.clone());
+                    }
+                });
             });
             ui.add_space(2.0);
         });
@@ -357,7 +391,63 @@ impl App {
         }
     }
 
+    fn settings_window(&mut self, ctx: &egui::Context) {
+        let Some(draft) = &mut self.settings_draft else {
+            return;
+        };
+        let mut open = true;
+        let mut save = false;
+        let mut pick = false;
+        egui::Window::new(s::SETTINGS_TITLE)
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(s::SETTINGS_OUTPUT_DIR);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut draft.output_dir)
+                            .hint_text(s::SETTINGS_OUTPUT_HINT)
+                            .desired_width(360.0),
+                    );
+                    pick = ui.button(s::CHOOSE).clicked();
+                    if ui.button(s::SETTINGS_CLEAR).clicked() {
+                        draft.output_dir.clear();
+                    }
+                });
+                ui.weak(s::SETTINGS_OUTPUT_INFO);
+                ui.add_space(6.0);
+                save = ui.button(s::SETTINGS_SAVE).clicked();
+            });
+        if pick {
+            let start = Some(PathBuf::from(draft.output_dir.trim())).filter(|p| p.is_dir());
+            self.worker.pick(Pick::SettingsOutputDir, start);
+        }
+        if save {
+            let mut new = draft.clone();
+            new.output_dir = new.output_dir.trim().to_string();
+            let result = Settings::default_path()
+                .ok_or_else(|| "Kein Konfigurationsordner (HOME fehlt)".to_string())
+                .and_then(|p| new.save(&p));
+            match result {
+                Ok(()) => {
+                    self.log(s::SETTINGS_SAVED);
+                    if self.running.is_none() {
+                        self.model.destination = new.output_dir.clone();
+                        self.model.mark_dirty();
+                    }
+                    self.settings = new;
+                    self.settings_draft = None;
+                }
+                Err(e) => self.notice = Some(format!("Speichern fehlgeschlagen: {e}")),
+            }
+        } else if !open {
+            self.settings_draft = None;
+        }
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context) {
+        self.settings_window(ctx);
         if let Some(text) = self.notice.clone() {
             let mut open = true;
             egui::Window::new("Hinweis")
@@ -540,11 +630,7 @@ impl App {
                             ui.label(entry.name())
                                 .on_hover_text(entry.found.path.display().to_string());
                         });
-                        row.col(|ui| {
-                            if let Some(m) = entry.media() {
-                                ui.label(format_size(m.size));
-                            }
-                        });
+                        row.col(|ui| size_cell(ui, entry));
                         row.col(|ui| {
                             if let Some(m) = entry.media() {
                                 ui.label(format!(
@@ -899,6 +985,31 @@ fn kind_label(kind: TrackType, r: &TrackRef) -> String {
     match r {
         TrackRef::Number(n) => format!("{} {n}", kind.label()),
         other => other.label(),
+    }
+}
+
+/// Größe; nach einem Lauf die neue Größe mit Änderung in Prozent.
+fn size_cell(ui: &mut egui::Ui, entry: &crate::state::FileEntry) {
+    match entry.size_change {
+        Some((before, after)) => {
+            ui.label(format_size(after));
+            if let Some(pct) = format_percent_change(before, after) {
+                let color = if after < before { GREEN } else { YELLOW };
+                ui.colored_label(color, pct);
+            }
+            ui.response().on_hover_text(format!(
+                "{}: {}\n{}: {}",
+                s::SIZE_BEFORE,
+                format_size(before),
+                s::SIZE_AFTER,
+                format_size(after)
+            ));
+        }
+        None => {
+            if let Some(m) = entry.media() {
+                ui.label(format_size(m.size));
+            }
+        }
     }
 }
 

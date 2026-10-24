@@ -15,6 +15,19 @@ pub const CLEAR_LIST: &str = "Liste leeren";
 pub const DROP_HINT: &str = "MKV-Dateien oder Ordner hierher ziehen";
 pub const SIZE_TOTAL: &str = "Größe vorher → nachher";
 pub const SIZE_SAVED: &str = "gespart";
+pub const SIZE_BEFORE: &str = "vorher";
+pub const SIZE_AFTER: &str = "nachher";
+
+// Fenster „Einstellungen“
+pub const SETTINGS_BUTTON: &str = "⚙ Einstellungen";
+pub const SETTINGS_TITLE: &str = "Einstellungen";
+pub const SETTINGS_OUTPUT_DIR: &str = "Fester Ausgabeordner:";
+pub const SETTINGS_OUTPUT_HINT: &str = "Leer = Originale ersetzen";
+pub const SETTINGS_OUTPUT_INFO: &str = "Wird bei jedem Start als Zielordner eingetragen. \
+                                        Im Reiter „Mux-Einstellungen“ lässt er sich pro Lauf ändern.";
+pub const SETTINGS_SAVE: &str = "Speichern";
+pub const SETTINGS_CLEAR: &str = "Leeren";
+pub const SETTINGS_SAVED: &str = "Einstellungen gespeichert";
 pub const COL_NAME: &str = "Name";
 pub const COL_SIZE: &str = "Größe";
 pub const COL_TRACKS: &str = "Spuren";

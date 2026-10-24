@@ -62,8 +62,13 @@ Spur ohne Sprache zählt nur für den Eintrag „undefiniert“, nie für eine e
 werden normalisiert: `ger` = `deu` = `de`.
 
 *Starten* arbeitet die Warteschlange nacheinander ab, mit Fortschritt pro Datei und gesamt sowie
-Log; *Abbrechen* beendet den laufenden Prozess sofort. Jede fertige Datei zeigt ihre Größe vorher → nachher; die
-Statuszeile und das Log nennen die Summe des Laufs.
+Log; *Abbrechen* beendet den laufenden Prozess sofort. Nach dem Lauf zeigt die Spalte *Größe* die neue
+Größe mit Änderung in Prozent (Tooltip: vorher/nachher); die Statuszeile und das Log nennen die
+Summe des Laufs.
+
+Unter *⚙ Einstellungen* (oben rechts) lässt sich ein **fester Ausgabeordner** festlegen. Er wird in
+`~/.config/trackwright/gui.json` gespeichert und bei jedem Start als Zielordner eingetragen; im
+Reiter „Mux-Einstellungen“ kann er pro Lauf geändert werden.
 
 ## Datensicherheit
 

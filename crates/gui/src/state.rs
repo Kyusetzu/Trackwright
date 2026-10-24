@@ -36,6 +36,8 @@ pub struct FileEntry {
     pub probe: ProbeState,
     pub job: JobState,
     pub checked: bool,
+    /// Größe vorher/nachher des letzten erfolgreichen Laufs.
+    pub size_change: Option<(u64, u64)>,
 }
 
 impl FileEntry {
@@ -182,6 +184,7 @@ impl Model {
                 found: f,
                 probe: ProbeState::Pending,
                 job: JobState::Idle,
+                size_change: None,
                 checked: false,
             });
         }
@@ -307,19 +310,25 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-/// „1.5 GB → 1.2 GB (−20 %)“
+/// „1.5 GB → 1.2 GB (−20.0 %)“
 pub fn format_size_change(before: u64, after: u64) -> String {
-    let change = if before == 0 {
-        String::new()
+    let pct = format_percent_change(before, after)
+        .map(|p| format!(" ({p})"))
+        .unwrap_or_default();
+    format!("{} → {}{pct}", format_size(before), format_size(after))
+}
+
+/// „−20.0 %“; `None` bei Ausgangsgröße 0.
+pub fn format_percent_change(before: u64, after: u64) -> Option<String> {
+    if before == 0 {
+        return None;
+    }
+    let pct = (after as f64 - before as f64) / before as f64 * 100.0;
+    Some(if pct.abs() < 0.05 {
+        "±0 %".to_string()
     } else {
-        let pct = (after as f64 - before as f64) / before as f64 * 100.0;
-        if pct.abs() < 0.05 {
-            " (±0 %)".to_string()
-        } else {
-            format!(" ({}{:.1} %)", if pct < 0.0 { "−" } else { "+" }, pct.abs())
-        }
-    };
-    format!("{} → {}{change}", format_size(before), format_size(after))
+        format!("{}{:.1} %", if pct < 0.0 { "−" } else { "+" }, pct.abs())
+    })
 }
 
 #[cfg(test)]

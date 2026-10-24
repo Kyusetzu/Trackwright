@@ -3560,6 +3560,7 @@ dependencies = [
  "egui_extras",
  "regex",
  "rfd",
+ "serde",
  "serde_json",
  "tempfile",
  "tracing",

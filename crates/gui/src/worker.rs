@@ -19,6 +19,7 @@ pub enum Pick {
     AddFiles,
     SourceFolder,
     Destination,
+    SettingsOutputDir,
 }
 
 #[derive(Debug)]
@@ -125,7 +126,7 @@ impl Worker {
                     .add_filter("Matroska", &["mkv", "MKV"])
                     .pick_files()
                     .unwrap_or_default(),
-                Pick::SourceFolder | Pick::Destination => {
+                Pick::SourceFolder | Pick::Destination | Pick::SettingsOutputDir => {
                     dialog.pick_folder().into_iter().collect()
                 }
             };
