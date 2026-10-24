@@ -26,4 +26,5 @@ trackwright-core = { path = "../core" }
 winit = { version = "0.30.13", default-features = false, features = ["x11"] }
 
 [dev-dependencies]
+png = "0.18"
 tempfile = "3.27.0"

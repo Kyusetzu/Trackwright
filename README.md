@@ -26,6 +26,10 @@ The heavy lifting is done by `mkvmerge` and `mkvpropedit` from
 [mkv-muxing-batch-gui](https://github.com/yaser01/mkv-muxing-batch-gui), but Trackwright only does
 the core job: **removing tracks and setting flags**. It does not add tracks.
 
+<p align="center">
+  <img src="docs/screenshot-videos.png" alt="Trackwright: video list after a run, with sizes before → after and the track details of the selected file" width="900">
+</p>
+
 ## Highlights
 
 - 🗂 **Batch processing.** Load whole folders recursively, pick files, or **drag & drop** files and
@@ -92,6 +96,10 @@ number, language, codec, channels, name, Default and Forced.
 | **Subtitles** | The same two rows for subtitle tracks. |
 | **Abort on errors** (*Bei Fehlern abbrechen*) | The first error stops the rest of the queue. |
 | **Without trash** (*Ohne Papierkorb*) | Only when replacing. On shares without a trash can (SMB/NFS), the original is moved to `_trackwright-original/` instead of the file being refused. |
+
+<p align="center">
+  <img src="docs/screenshot-mux.png" alt="Trackwright: mux settings keeping German and Japanese audio, with the queue showing the planned action per file" width="900">
+</p>
 
 Language codes are normalised (`ger` = `deu` = `de`). A track without a language only matches the
 *undefined* entry, never a real language.
@@ -181,6 +189,13 @@ into a destination folder, replacing with trash, 50 files in one batch, special 
 file names, read-only and corrupt files, and simulated failures (full disk, cancellation, failed
 verification). Without MKVToolNix and ffmpeg they report "skipped"; in CI
 (`TRACKWRIGHT_REQUIRE_TOOLS=1`) they fail instead.
+
+The screenshots in `docs/` are generated from real sample files by an ignored test that opens a
+window, runs a real batch and captures it:
+
+```bash
+cargo test -p trackwright-gui --release -- --ignored readme_screenshots
+```
 
 The UI itself is in German. All UI strings live in `crates/gui/src/strings.rs`, so a translation
 only needs to touch that file.

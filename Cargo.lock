@@ -3558,6 +3558,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "png",
  "regex",
  "rfd",
  "serde",

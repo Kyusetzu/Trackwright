@@ -272,6 +272,11 @@ impl App {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn is_running(&self) -> bool {
+        self.running.is_some()
+    }
+
     fn can_start(&self) -> bool {
         self.running.is_none() && self.tools_status.is_ok() && !self.model.work().is_empty()
     }
@@ -284,7 +289,7 @@ impl App {
         }
     }
 
-    fn start(&mut self) {
+    pub(crate) fn start(&mut self) {
         let items: Vec<WorkItem> = self
             .model
             .work()
