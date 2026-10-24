@@ -2,7 +2,7 @@
 pkgname=trackwright
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="MKV-Spuren im Batch entfernen und Flags setzen (GUI + CLI, nutzt MKVToolNix)"
+pkgdesc="MKV-Spuren im Batch entfernen und Standard/Forced setzen (GUI, nutzt MKVToolNix)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Kyusetzu/Trackwright"
 license=('AGPL-3.0-or-later')
@@ -33,7 +33,6 @@ check() {
 
 package() {
   cd "$pkgname"
-  install -Dm755 target/release/trackwright     "$pkgdir/usr/bin/trackwright"
   install -Dm755 target/release/trackwright-gui "$pkgdir/usr/bin/trackwright-gui"
   install -Dm644 packaging/trackwright.desktop  "$pkgdir/usr/share/applications/trackwright.desktop"
   install -Dm644 packaging/trackwright.svg      "$pkgdir/usr/share/icons/hicolor/scalable/apps/trackwright.svg"

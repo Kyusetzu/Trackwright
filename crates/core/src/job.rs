@@ -1,19 +1,19 @@
-//! Sichere Ausführung eines Plans: tmp-Datei, Prüfung, Ausgabemodi, Papierkorb, Snapshot.
+//! Sichere Ausführung eines Plans: tmp-Datei, Prüfung, Zielordner oder Original ersetzen,
+//! Papierkorb.
 //!
 //! Grundsatz: Ein Original wird nie direkt überschrieben. Remux schreibt in
 //! `<name>.trackwright.tmp.mkv` im Zielverzeichnis, ersetzt wird erst nach erfolgreicher Prüfung.
 
-use crate::command::{propedit_command, remux_command, selector};
+use crate::command::{propedit_command, remux_command};
 use crate::error::{Error, Result};
 use crate::exec::{self, ExecEvent};
 use crate::fsutil::{
     FAILED_SUFFIX, ORIGINAL_DIR, TMP_SUFFIX, free_path, is_network_fs, with_suffix,
 };
-use crate::lang::Lang;
-use crate::model::{MediaInfo, TrackType};
+use crate::model::MediaInfo;
 use crate::plan::{FilePlan, Strategy};
 use crate::probe::probe;
-use crate::tools::{Program, ToolCommand, Tools};
+use crate::tools::{ToolCommand, Tools};
 use crate::verify::verify;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -23,9 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// Wohin das Ergebnis geschrieben wird.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OutputMode {
-    /// Neue Datei neben dem Original: `<name><suffix>.mkv`.
-    Beside { suffix: String },
-    /// In einen Ausgabeordner, Ordnerstruktur ab dem Eingabeordner gespiegelt.
+    /// In einen Zielordner, Ordnerstruktur ab dem Eingabeordner gespiegelt.
     Directory { dir: PathBuf },
     /// Original ersetzen. Das Original wandert in den Papierkorb; ist der nicht verfügbar und
     /// `fallback_dir` gesetzt, nach `_trackwright-original/`, sonst wird die Datei nicht bearbeitet.
@@ -34,8 +32,8 @@ pub enum OutputMode {
 
 impl Default for OutputMode {
     fn default() -> Self {
-        OutputMode::Beside {
-            suffix: ".trackwright".into(),
+        OutputMode::Replace {
+            fallback_dir: false,
         }
     }
 }
@@ -44,8 +42,6 @@ impl Default for OutputMode {
 #[derive(Debug, Clone, Default)]
 pub struct JobOptions {
     pub mode: OutputMode,
-    /// Vor In-place-Änderungen den Header-Zustand als JSON sichern (für Undo).
-    pub snapshot_dir: Option<PathBuf>,
 }
 
 /// Fortschritt einer Datei.
@@ -64,7 +60,6 @@ pub struct JobReport {
     pub warnings: Vec<String>,
     /// Wohin das Original verschoben wurde (Modus „ersetzen“).
     pub original_moved_to: Option<OriginalLocation>,
-    pub snapshot: Option<PathBuf>,
     pub unchanged: bool,
 }
 
@@ -78,14 +73,6 @@ pub enum OriginalLocation {
 pub fn output_path(source: &Path, root: Option<&Path>, mode: &OutputMode) -> Result<PathBuf> {
     match mode {
         OutputMode::Replace { .. } => Ok(source.to_path_buf()),
-        OutputMode::Beside { suffix } => {
-            if suffix.is_empty() || suffix.contains('/') {
-                return Err(Error::Unsafe(
-                    "Suffix darf nicht leer sein und keinen „/“ enthalten".into(),
-                ));
-            }
-            Ok(with_suffix(source, &format!("{suffix}.mkv")))
-        }
         OutputMode::Directory { dir } => {
             let file_name = source
                 .file_name()
@@ -205,7 +192,7 @@ pub fn run_job(
 
     match (plan.strategy, replace) {
         (Strategy::Propedit, true) => {
-            run_propedit_in_place(plan, tools, opts, cancel, on_event, &mut report)?;
+            run_propedit_in_place(plan, tools, cancel, on_event, &mut report)?;
             report.output = Some(source.clone());
         }
         (Strategy::Propedit, false) => {
@@ -445,119 +432,17 @@ fn move_original_away(source: &Path, mode: &OutputMode) -> Result<OriginalLocati
 }
 
 // ---------------------------------------------------------------------------------------------
-// In place + Snapshot/Undo
-
-/// Gesicherter Header-Zustand einer Datei vor einer In-place-Änderung.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Snapshot {
-    pub path: PathBuf,
-    pub created_unix: u64,
-    pub tracks: Vec<SnapshotTrack>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SnapshotTrack {
-    pub uid: Option<u64>,
-    pub number: Option<u64>,
-    pub kind: TrackType,
-    pub type_index: u32,
-    pub language: String,
-    pub name: Option<String>,
-    pub default: bool,
-    pub forced: bool,
-}
-
-impl Snapshot {
-    pub fn from_plan(plan: &FilePlan) -> Snapshot {
-        Snapshot {
-            path: plan.path.clone(),
-            created_unix: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-            tracks: plan
-                .tracks
-                .iter()
-                .filter(|t| !t.changes().is_empty())
-                .map(|t| SnapshotTrack {
-                    uid: t.uid,
-                    number: t.number,
-                    kind: t.kind,
-                    type_index: t.type_index,
-                    language: t.before.lang.iso639_2().to_string(),
-                    name: t.before.name.clone(),
-                    default: t.before.default,
-                    forced: t.before.forced,
-                })
-                .collect(),
-        }
-    }
-
-    /// mkvpropedit-Aufruf, der den gesicherten Zustand wiederherstellt.
-    pub fn undo_command(&self) -> ToolCommand {
-        let mut cmd = ToolCommand::new(Program::Mkvpropedit);
-        cmd.arg(&self.path);
-        for t in &self.tracks {
-            let lang = Lang::parse(&t.language);
-            cmd.arg("--edit")
-                .arg(selector(t.uid, t.number, t.kind, t.type_index));
-            cmd.arg("--set")
-                .arg(format!("language={}", lang.iso639_2()))
-                .arg("--set")
-                .arg(format!("language-ietf={}", lang.ietf()));
-            match &t.name {
-                Some(n) => cmd.arg("--set").arg(format!("name={n}")),
-                None => cmd.arg("--delete").arg("name"),
-            };
-            cmd.arg("--set")
-                .arg(format!("flag-default={}", u8::from(t.default)))
-                .arg("--set")
-                .arg(format!("flag-forced={}", u8::from(t.forced)));
-        }
-        cmd
-    }
-
-    pub fn load(path: &Path) -> Result<Snapshot> {
-        let s = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        serde_json::from_str(&s).map_err(|source| Error::Json {
-            path: path.to_path_buf(),
-            source,
-        })
-    }
-}
-
-fn write_snapshot(plan: &FilePlan, dir: &Path) -> Result<PathBuf> {
-    std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-    let snap = Snapshot::from_plan(plan);
-    let stem = plan
-        .path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let file = free_path(&dir.join(format!("{stem}.{}.json", snap.created_unix)));
-    let json = serde_json::to_string_pretty(&snap).map_err(|source| Error::Json {
-        path: file.clone(),
-        source,
-    })?;
-    std::fs::write(&file, json).map_err(|e| Error::io(&file, e))?;
-    Ok(file)
-}
+// In place
 
 fn run_propedit_in_place(
     plan: &FilePlan,
     tools: &Tools,
-    opts: &JobOptions,
     cancel: &AtomicBool,
     on_event: &mut dyn FnMut(JobEvent),
     report: &mut JobReport,
 ) -> Result<()> {
     let source = &plan.path;
     check_writable(source)?;
-    if let Some(dir) = &opts.snapshot_dir {
-        let snap = write_snapshot(plan, dir)?;
-        on_event(JobEvent::Log(format!("Snapshot: {}", snap.display())));
-        report.snapshot = Some(snap);
-    }
     let cmd =
         propedit_command(plan, source).ok_or_else(|| Error::Verify("keine Änderungen".into()))?;
     // mkvpropedit wird nicht mitten im Schreiben abgebrochen; Abbruch greift davor.
@@ -567,13 +452,7 @@ fn run_propedit_in_place(
     }
     run_tool(&cmd, tools, &never, on_event, report)?;
     let info = probe(tools, source)?;
-    verify(plan, &info).map_err(|p| {
-        let mut msg = p.join("; ");
-        if let Some(s) = &report.snapshot {
-            msg.push_str(&format!(" – Undo mit Snapshot {}", s.display()));
-        }
-        Error::Verify(msg)
-    })?;
+    verify(plan, &info).map_err(|p| Error::Verify(p.join("; ")))?;
     on_event(JobEvent::Log("Prüfung bestanden".into()));
     Ok(())
 }
@@ -585,10 +464,6 @@ mod tests {
     #[test]
     fn output_paths() {
         let src = Path::new("/media/Serien/X/S01/E01.mkv");
-        assert_eq!(
-            output_path(src, None, &OutputMode::default()).expect("beside"),
-            PathBuf::from("/media/Serien/X/S01/E01.trackwright.mkv")
-        );
         assert_eq!(
             output_path(
                 src,
@@ -612,16 +487,6 @@ mod tests {
             )
             .expect("repl"),
             src
-        );
-        assert!(
-            output_path(
-                src,
-                None,
-                &OutputMode::Beside {
-                    suffix: String::new()
-                }
-            )
-            .is_err()
         );
         assert!(
             output_path(

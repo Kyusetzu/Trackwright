@@ -147,63 +147,10 @@ impl MediaInfo {
             .any(|t| t.lang().is_undefined())
     }
 
-    /// Spursignatur: Typ, Sprache, Codec und Name aller Spuren der Reihe nach.
-    pub fn signature(&self) -> Signature {
-        Signature(
-            self.tracks
-                .iter()
-                .map(|t| {
-                    format!(
-                        "{}:{}:{}:{}",
-                        t.kind.short(),
-                        t.lang(),
-                        t.codec,
-                        t.name.as_deref().unwrap_or("")
-                    )
-                })
-                .collect(),
-        )
-    }
-
     pub fn file_name(&self) -> String {
         self.path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.path.display().to_string())
     }
-}
-
-/// Spursignatur zur Gruppierung gleich aufgebauter Dateien.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Signature(pub Vec<String>);
-
-impl fmt::Display for Signature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.join(" | "))
-    }
-}
-
-/// Gruppe von Dateien mit gleicher Spursignatur.
-#[derive(Debug, Clone)]
-pub struct Group {
-    pub signature: Signature,
-    /// Indizes in die übergebene Dateiliste.
-    pub files: Vec<usize>,
-}
-
-/// Fasst Dateien mit gleicher Signatur zusammen (größte Gruppe zuerst).
-pub fn group_by_signature(files: &[MediaInfo]) -> Vec<Group> {
-    let mut groups: Vec<Group> = Vec::new();
-    for (i, file) in files.iter().enumerate() {
-        let sig = file.signature();
-        match groups.iter_mut().find(|g| g.signature == sig) {
-            Some(g) => g.files.push(i),
-            None => groups.push(Group {
-                signature: sig,
-                files: vec![i],
-            }),
-        }
-    }
-    groups.sort_by_key(|g| std::cmp::Reverse(g.files.len()));
-    groups
 }

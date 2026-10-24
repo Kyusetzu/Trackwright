@@ -2,88 +2,72 @@
 
 pub const APP_TITLE: &str = "Trackwright";
 
-pub const TAB_FILES: &str = "📁 Dateien";
-pub const TAB_RULES: &str = "⚙ Regeln";
-pub const TAB_GROUPS: &str = "🗂 Gruppen";
-pub const TAB_PREVIEW: &str = "🔍 Vorschau";
-pub const TAB_RUN: &str = "▶ Ausführen";
+pub const TAB_VIDEOS: &str = "🎞 Videos";
+pub const TAB_MUX: &str = "⚙ Mux-Einstellungen";
 
-pub const ADD_FOLDER: &str = "Ordner hinzufügen …";
+// Reiter „Videos“
+pub const SOURCE_FOLDER: &str = "Quellordner:";
+pub const SOURCE_HINT: &str = "Ordner eingeben und Enter drücken, oder Durchsuchen …";
+pub const BROWSE: &str = "Durchsuchen …";
 pub const ADD_FILES: &str = "Dateien hinzufügen …";
+pub const REMOVE_CHECKED: &str = "Markierte entfernen";
 pub const CLEAR_LIST: &str = "Liste leeren";
-pub const REMOVE_SELECTED: &str = "Ausgewählte entfernen";
-pub const RELOAD: &str = "Neu einlesen";
 pub const DROP_HINT: &str = "MKV-Dateien oder Ordner hierher ziehen";
-pub const ONLY_UNDEFINED: &str = "Nur Dateien mit undefinierten Spuren";
 pub const COL_NAME: &str = "Name";
 pub const COL_SIZE: &str = "Größe";
 pub const COL_TRACKS: &str = "Spuren";
-pub const COL_GROUP: &str = "Gruppe";
 pub const COL_STATUS: &str = "Status";
 pub const STATUS_PROBING: &str = "wird eingelesen …";
 pub const STATUS_READY: &str = "bereit";
-pub const UNDEFINED_BADGE: &str = "⚠ ohne Sprache";
+pub const UNDEFINED_BADGE: &str = "Spuren ohne Sprache";
+pub const TRACKS_OF: &str = "Spuren von";
+pub const SELECT_FILE_HINT: &str = "Datei anklicken, um ihre Spuren zu sehen.";
+pub const COL_ID: &str = "ID";
+pub const COL_TYPE: &str = "Typ";
+pub const COL_NR: &str = "Nr.";
+pub const COL_LANG: &str = "Sprache";
+pub const COL_CODEC: &str = "Codec";
+pub const COL_CHANNELS: &str = "Kanäle";
+pub const COL_TRACK_NAME: &str = "Name";
+pub const COL_DEFAULT: &str = "Standard";
+pub const COL_FORCED: &str = "Forced";
 
-pub const AUDIO: &str = "Audio";
-pub const SUBTITLES: &str = "Untertitel";
-pub const RULE_KEEP: &str = "Behalten";
-pub const RULE_KEEP_HINT: &str = "leer = alle behalten";
-pub const RULE_DEFAULT: &str = "Standard";
-pub const RULE_FORCED: &str = "Forced";
-pub const RULE_FLAG_HINT: &str = "leer = unverändert, „keine“ = überall entfernen";
-pub const RULE_SET_LANG: &str = "Sprache setzen (vor allen anderen Regeln)";
-pub const RULE_SET_NAME: &str = "Name setzen";
-pub const RULE_WHEN: &str = "wenn";
-pub const RULE_ADD: &str = "➕ Zeile";
-pub const SUGGESTIONS: &str = "Vorschläge aus Spurnamen (nur Spuren ohne Sprache)";
-pub const SUGGESTION_APPLY: &str = "Übernehmen";
-pub const ALLOW_NO_AUDIO: &str =
-    "Dateien bearbeiten, in denen keine Audiospur übrig bliebe (sonst übersprungen)";
-pub const SYNTAX_HELP_TITLE: &str = "Syntax-Hilfe";
-pub const SYNTAX_HELP: &str = "\
-Nr. 1          Position im Typ (1-basiert), auch Nr. 1,3  Nr. 2-4  Nr. letzte
-ID 5           absolute mkvmerge-ID
-Sprache = ger  auch: Sprache in {ger, jpn}, Sprache = undefiniert, Sprache != eng
-Codec = aac    Teilstring von Codec/Codec-ID, auch Codec in {ac3, dts}
-Kanäle >= 6    Vergleiche: = != < <= > >=
-Name ~ /re/    Regex auf den Spurnamen, Name !~ /(?i)kommentar/ für „nicht“
-Flag forced    vorhandenes Flag: default, forced, hörgeschädigt, kommentar
-alle           jede Spur
-Verknüpfen:    UND, ODER, NICHT, Klammern ( … )
-Beispiel:      Nr. 1 ODER Sprache in {ger, jpn}
-Standard:      bekommt nur die erste passende behaltene Spur";
-
-pub const PRESET: &str = "Preset";
-pub const PRESET_LOAD: &str = "Laden …";
-pub const PRESET_SAVE: &str = "Speichern unter …";
-pub const PRESET_NONE: &str = "– Preset wählen –";
-
-pub const GROUP_FILES: &str = "Dateien";
-pub const GROUP_RESET: &str = "Overrides zurücksetzen";
-pub const GROUP_REFERENCE: &str = "Nur diese Spursignatur bearbeiten";
-pub const GROUP_REFERENCE_ACTIVE: &str = "Referenz – andere Gruppen werden übersprungen";
-pub const GROUP_KEEP: &str = "behalten";
-pub const GROUP_HINT: &str = "Schalter überschreiben die Regeln nur für diese Gruppe. ✎ = Override aktiv, Klick auf ↺ setzt zurück.";
-
-pub const PREVIEW_COPY_ALL: &str = "Alle Befehle kopieren";
-pub const PREVIEW_COPY: &str = "Kopieren";
-pub const PREVIEW_ONLY_CHANGES: &str = "Nur Dateien mit Änderungen";
-
-pub const RUN_MODE: &str = "Ausgabe";
-pub const MODE_BESIDE: &str = "Neben Original";
-pub const MODE_DIR: &str = "In Ausgabeordner";
-pub const MODE_REPLACE: &str = "Original ersetzen (Original in den Papierkorb)";
-pub const SUFFIX: &str = "Suffix";
-pub const OUT_DIR: &str = "Ausgabeordner";
+// Reiter „Mux-Einstellungen“
+pub const SETTINGS: &str = "Einstellungen";
+pub const DESTINATION: &str = "Zielordner:";
+pub const DESTINATION_HINT: &str = "Leer lassen, um die Originale zu ersetzen";
 pub const CHOOSE: &str = "Wählen …";
+pub const KEEP_AUDIOS: &str = "Nur diese Audios behalten:";
+pub const KEEP_SUBTITLES: &str = "Nur diese Untertitel behalten:";
+pub const DEFAULT_AUDIO: &str = "Diese Audio als Standard:";
+pub const DEFAULT_SUBTITLE: &str = "Diesen Untertitel als Standard:";
+pub const DEFAULT_TOOLTIP: &str = "Halb angehakt: Die Spur wird nur Standard.\n\
+                                   Ganz angehakt: Die Spur wird Standard und Forced.\n\
+                                   Alle anderen Spuren des Typs verlieren das Flag.";
+pub const ALL_TRACKS: &str = "Alle Spuren";
+pub const DISCARD_ALL: &str = "Alle verwerfen";
+pub const SECTION_NUMBER: &str = "— Nummer —";
+pub const SECTION_LANGUAGE: &str = "— Sprache —";
+pub const SECTION_NAME: &str = "— Name —";
+pub const DEFAULT_NONE: &str = "Keine (Standard überall entfernen)";
+pub const NO_TRACKS: &str = "Keine Spuren geladen";
+pub const ABORT_ON_ERRORS: &str = "Bei Fehlern abbrechen";
 pub const FALLBACK_DIR: &str =
     "Ohne Papierkorb (z. B. SMB): Original nach _trackwright-original/ verschieben";
-pub const SNAPSHOT: &str = "Header vor In-place-Änderungen sichern (Undo)";
-pub const PARALLEL: &str = "Parallel";
-pub const PARALLEL_HINT: &str = "Remux ist I/O-gebunden – auf SMB besser 1";
+pub const QUEUE: &str = "Warteschlange";
+pub const COL_ACTION: &str = "Aktion";
 pub const START: &str = "▶ Starten";
 pub const CANCEL: &str = "⏹ Abbrechen";
 pub const LOG: &str = "Log";
+pub const COPY: &str = "Kopieren";
+pub const COPY_COMMAND: &str = "Befehl kopieren";
 pub const TOTAL: &str = "Gesamt";
-pub const NOTHING_TO_DO: &str = "Nichts zu tun – Regeln anpassen oder Dateien hinzufügen.";
+pub const NOTHING_TO_DO: &str = "Nichts zu tun – Auswahl anpassen oder Dateien hinzufügen.";
 pub const TOOLS_MISSING: &str = "MKVToolNix fehlt";
+
+pub const CONFIRM_TITLE: &str = "Originale ersetzen?";
+pub const CONFIRM_TEXT: &str = "Es ist kein Zielordner angegeben. Die bearbeiteten Dateien \
+ersetzen die Originale.\n\nBeim Entfernen von Spuren wandert das Original in den Papierkorb. \
+Reine Flag-Änderungen werden direkt in der Datei vorgenommen.";
+pub const CONFIRM_YES: &str = "Ja, Originale ersetzen";
+pub const CONFIRM_NO: &str = "Abbrechen";

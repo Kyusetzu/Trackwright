@@ -19,14 +19,6 @@ pub struct TrackState {
 /// Eine einzelne Änderung an einer behaltenen Spur.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Change {
-    Language {
-        from: Lang,
-        to: Lang,
-    },
-    Name {
-        from: Option<String>,
-        to: Option<String>,
-    },
     Default(bool),
     Forced(bool),
 }
@@ -35,13 +27,6 @@ impl fmt::Display for Change {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let onoff = |b: bool| if b { "an" } else { "aus" };
         match self {
-            Change::Language { from, to } => write!(f, "Sprache {from} → {to}"),
-            Change::Name { from, to } => write!(
-                f,
-                "Name „{}“ → „{}“",
-                from.as_deref().unwrap_or(""),
-                to.as_deref().unwrap_or("")
-            ),
             Change::Default(b) => write!(f, "Standard {}", onoff(*b)),
             Change::Forced(b) => write!(f, "Forced {}", onoff(*b)),
         }
@@ -89,18 +74,6 @@ impl TrackPlan {
             return v;
         }
         let (b, a) = (&self.before, &self.after);
-        if b.lang != a.lang {
-            v.push(Change::Language {
-                from: b.lang.clone(),
-                to: a.lang.clone(),
-            });
-        }
-        if b.name != a.name {
-            v.push(Change::Name {
-                from: b.name.clone(),
-                to: a.name.clone(),
-            });
-        }
         if b.default != a.default {
             v.push(Change::Default(a.default));
         }

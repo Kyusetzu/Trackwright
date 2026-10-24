@@ -39,10 +39,6 @@ pub enum Error {
     #[error("Prüfung fehlgeschlagen: {0}")]
     Verify(String),
     #[error("{0}")]
-    Rule(#[from] crate::rules::ParseError),
-    #[error("Preset {}: {message}", path.display())]
-    Preset { path: PathBuf, message: String },
-    #[error("{0}")]
     Unsafe(String),
     #[error("{0}")]
     Environment(String),
