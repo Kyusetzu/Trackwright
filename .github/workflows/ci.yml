@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Integrationstests dürfen in CI nicht still übersprungen werden.
+  TRACKWRIGHT_REQUIRE_TOOLS: "1"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: MKVToolNix und ffmpeg installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mkvtoolnix ffmpeg
+          mkvmerge --version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --workspace --locked
+      - name: Release-Build
+        run: cargo build --workspace --release --locked

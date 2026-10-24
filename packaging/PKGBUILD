@@ -1,0 +1,41 @@
+# Maintainer: Kyusetzu
+pkgname=trackwright
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="MKV-Spuren im Batch entfernen und Flags setzen (GUI + CLI, nutzt MKVToolNix)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Kyusetzu/Trackwright"
+license=('AGPL-3.0-or-later')
+depends=('mkvtoolnix-cli' 'gcc-libs' 'glibc' 'libxkbcommon' 'wayland' 'vulkan-icd-loader' 'xdg-desktop-portal')
+optdepends=('libx11: X11-Sitzungen' 'libxcursor: X11-Sitzungen')
+makedepends=('cargo' 'git')
+source=("$pkgname::git+$url.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release
+}
+
+check() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen --workspace
+}
+
+package() {
+  cd "$pkgname"
+  install -Dm755 target/release/trackwright     "$pkgdir/usr/bin/trackwright"
+  install -Dm755 target/release/trackwright-gui "$pkgdir/usr/bin/trackwright-gui"
+  install -Dm644 packaging/trackwright.desktop  "$pkgdir/usr/share/applications/trackwright.desktop"
+  install -Dm644 packaging/trackwright.svg      "$pkgdir/usr/share/icons/hicolor/scalable/apps/trackwright.svg"
+  install -Dm644 README.md                      "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
