@@ -365,6 +365,22 @@ done
     );
     std::fs::write(&script, src).expect("script");
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    // Parallel laufende Tests forken ständig; ein Kind, das während `fs::write` entstand, hält
+    // den Schreib-Deskriptor bis zu seinem `exec` → kurzzeitig ETXTBSY. Abwarten, bis das
+    // Skript ausführbar ist.
+    for _ in 0..200 {
+        match std::process::Command::new(&script)
+            .args(["-J", "/dev/null"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+        {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            _ => break,
+        }
+    }
     Tools {
         mkvmerge: script,
         mkvpropedit: PathBuf::from("mkvpropedit"),
