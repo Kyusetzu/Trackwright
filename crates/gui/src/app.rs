@@ -604,7 +604,7 @@ impl App {
                 .column(Column::auto())
                 .column(Column::auto().at_least(32.0))
                 .column(Column::remainder().at_least(240.0).clip(true))
-                .column(Column::auto().at_least(80.0))
+                .column(Column::auto().at_least(190.0))
                 .column(Column::auto().at_least(110.0))
                 .column(Column::auto().at_least(140.0))
                 .header(22.0, |mut h| {
@@ -988,22 +988,15 @@ fn kind_label(kind: TrackType, r: &TrackRef) -> String {
     }
 }
 
-/// Größe; nach einem Lauf die neue Größe mit Änderung in Prozent.
+/// Originalgröße; nach dem Konvertieren „vorher → nachher (±x %)“.
 fn size_cell(ui: &mut egui::Ui, entry: &crate::state::FileEntry) {
     match entry.size_change {
         Some((before, after)) => {
-            ui.label(format_size(after));
+            ui.label(format!("{} → {}", format_size(before), format_size(after)));
             if let Some(pct) = format_percent_change(before, after) {
                 let color = if after < before { GREEN } else { YELLOW };
-                ui.colored_label(color, pct);
+                ui.colored_label(color, format!("({pct})"));
             }
-            ui.response().on_hover_text(format!(
-                "{}: {}\n{}: {}",
-                s::SIZE_BEFORE,
-                format_size(before),
-                s::SIZE_AFTER,
-                format_size(after)
-            ));
         }
         None => {
             if let Some(m) = entry.media() {

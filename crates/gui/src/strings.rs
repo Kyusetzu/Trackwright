@@ -15,8 +15,6 @@ pub const CLEAR_LIST: &str = "Liste leeren";
 pub const DROP_HINT: &str = "MKV-Dateien oder Ordner hierher ziehen";
 pub const SIZE_TOTAL: &str = "Größe vorher → nachher";
 pub const SIZE_SAVED: &str = "gespart";
-pub const SIZE_BEFORE: &str = "vorher";
-pub const SIZE_AFTER: &str = "nachher";
 
 // Fenster „Einstellungen“
 pub const SETTINGS_BUTTON: &str = "⚙ Einstellungen";

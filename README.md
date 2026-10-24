@@ -62,8 +62,8 @@ Spur ohne Sprache zählt nur für den Eintrag „undefiniert“, nie für eine e
 werden normalisiert: `ger` = `deu` = `de`.
 
 *Starten* arbeitet die Warteschlange nacheinander ab, mit Fortschritt pro Datei und gesamt sowie
-Log; *Abbrechen* beendet den laufenden Prozess sofort. Nach dem Lauf zeigt die Spalte *Größe* die neue
-Größe mit Änderung in Prozent (Tooltip: vorher/nachher); die Statuszeile und das Log nennen die
+Log; *Abbrechen* beendet den laufenden Prozess sofort. Die Spalte *Größe* zeigt die Originalgröße, nach dem
+Konvertieren „vorher → nachher (±x %)“; die Statuszeile und das Log nennen die
 Summe des Laufs.
 
 Unter *⚙ Einstellungen* (oben rechts) lässt sich ein **fester Ausgabeordner** festlegen. Er wird in
