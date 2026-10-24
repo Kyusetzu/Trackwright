@@ -1,0 +1,165 @@
+{
+  "attachments": [],
+  "chapters": [],
+  "container": {
+    "properties": {
+      "container_type": 17,
+      "date_local": "2026-10-24T16:43:33+00:00",
+      "date_utc": "2026-10-24T16:43:33Z",
+      "duration": 5038000000,
+      "is_providing_timestamps": true,
+      "muxing_application": "libebml v1.4.5 + libmatroska v1.7.1",
+      "segment_uid": "2b37016d6cff04ecd839a14385755b74",
+      "timestamp_scale": 1000000,
+      "writing_application": "mkvmerge v82.0 ('I'm The President') 64-bit"
+    },
+    "recognized": true,
+    "supported": true,
+    "type": "Matroska"
+  },
+  "errors": [],
+  "file_name": "/media/und.mkv",
+  "global_tags": [
+    {
+      "num_entries": 3
+    }
+  ],
+  "identification_format_version": 19,
+  "track_tags": [
+    {
+      "num_entries": 1,
+      "track_id": 0
+    },
+    {
+      "num_entries": 1,
+      "track_id": 1
+    },
+    {
+      "num_entries": 1,
+      "track_id": 2
+    }
+  ],
+  "tracks": [
+    {
+      "codec": "AVC/H.264/MPEG-4p10",
+      "id": 0,
+      "properties": {
+        "codec_id": "V_MPEG4/ISO/AVC",
+        "codec_private_data": "0142c00dffe100166742c00dda0507ec0440000003004000000c83c50aa801000468ce0fc8",
+        "codec_private_length": 37,
+        "color_range": 1,
+        "default_duration": 40000000,
+        "default_track": false,
+        "display_dimensions": "320x240",
+        "display_unit": 0,
+        "enabled_track": true,
+        "forced_track": false,
+        "language": "und",
+        "language_ietf": "und",
+        "minimum_timestamp": 0,
+        "num_index_entries": 1,
+        "number": 1,
+        "packetizer": "mpeg4_p10_video",
+        "pixel_dimensions": "320x240",
+        "tag_encoder": "Lavc60.31.102 libx264",
+        "uid": 2237885322873546368
+      },
+      "type": "video"
+    },
+    {
+      "codec": "AAC",
+      "id": 1,
+      "properties": {
+        "audio_bits_per_sample": 32,
+        "audio_channels": 2,
+        "audio_sampling_frequency": 44100,
+        "codec_delay": 23219955,
+        "codec_id": "A_AAC",
+        "codec_private_data": "121056e500",
+        "codec_private_length": 5,
+        "default_duration": 23219954,
+        "default_track": false,
+        "enabled_track": true,
+        "forced_track": false,
+        "language": "und",
+        "language_ietf": "und",
+        "minimum_timestamp": 0,
+        "num_index_entries": 0,
+        "number": 2,
+        "tag_encoder": "Lavc60.31.102 aac",
+        "track_name": "Deutsch",
+        "uid": 7948373346579271766
+      },
+      "type": "audio"
+    },
+    {
+      "codec": "AAC",
+      "id": 2,
+      "properties": {
+        "audio_bits_per_sample": 32,
+        "audio_channels": 2,
+        "audio_sampling_frequency": 44100,
+        "codec_delay": 23219955,
+        "codec_id": "A_AAC",
+        "codec_private_data": "121056e500",
+        "codec_private_length": 5,
+        "default_duration": 23219954,
+        "default_track": false,
+        "enabled_track": true,
+        "forced_track": false,
+        "language": "und",
+        "language_ietf": "und",
+        "minimum_timestamp": 0,
+        "num_index_entries": 0,
+        "number": 3,
+        "tag_encoder": "Lavc60.31.102 aac",
+        "track_name": "English",
+        "uid": 12517884107220245638
+      },
+      "type": "audio"
+    },
+    {
+      "codec": "SubRip/SRT",
+      "id": 3,
+      "properties": {
+        "codec_id": "S_TEXT/UTF8",
+        "codec_private_length": 0,
+        "default_track": false,
+        "enabled_track": true,
+        "encoding": "UTF-8",
+        "forced_track": false,
+        "language": "und",
+        "language_ietf": "und",
+        "minimum_timestamp": 500000000,
+        "num_index_entries": 2,
+        "number": 4,
+        "text_subtitles": true,
+        "track_name": "Deutsch",
+        "uid": 11157257140707124451
+      },
+      "type": "subtitles"
+    },
+    {
+      "codec": "SubRip/SRT",
+      "id": 4,
+      "properties": {
+        "codec_id": "S_TEXT/UTF8",
+        "codec_private_length": 0,
+        "default_track": false,
+        "enabled_track": true,
+        "encoding": "UTF-8",
+        "forced_track": false,
+        "language": "und",
+        "language_ietf": "und",
+        "minimum_timestamp": 500000000,
+        "num_index_entries": 1,
+        "number": 5,
+        "text_subtitles": true,
+        "track_name": "English",
+        "uid": 1690117174304094494
+      },
+      "type": "subtitles"
+    }
+  ],
+  "warnings": []
+}
