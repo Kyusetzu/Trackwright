@@ -1,12 +1,15 @@
 [Desktop Entry]
 Type=Application
 Name=Trackwright
-GenericName=MKV-Spuren-Editor
-Comment=MKV-Spuren im Batch entfernen und Flags setzen
+GenericName=MKV Track Editor
+GenericName[de]=MKV-Spuren-Editor
+Comment=Batch-remove MKV tracks and set default/forced flags
+Comment[de]=MKV-Spuren im Batch entfernen und Flags setzen
 Exec=trackwright-gui %F
 Icon=trackwright
 Terminal=false
 Categories=AudioVideo;Video;Utility;
 MimeType=video/x-matroska;
-Keywords=mkv;matroska;mkvmerge;mkvtoolnix;spuren;untertitel;audio;
+Keywords=mkv;matroska;mkvmerge;mkvtoolnix;tracks;subtitles;audio;
+Keywords[de]=mkv;matroska;mkvmerge;mkvtoolnix;spuren;untertitel;audio;
 StartupWMClass=trackwright

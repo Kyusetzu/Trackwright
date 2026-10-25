@@ -48,8 +48,24 @@ the core job: **removing tracks and setting flags**. It does not add tracks.
   Originals go to the trash, never get overwritten in place.
 - ⚙ **Persistent output folder.** Set a fixed output folder once in *Settings*, and it is filled in
   on every start.
+- 🌐 **English or German.** The UI is in English by default; switch to German in *Settings*.
 
 ## Quick start
+
+### AppImage (easiest)
+
+Download `Trackwright-<version>-x86_64.AppImage` from the
+[latest release](https://github.com/Kyusetzu/Trackwright/releases/latest), then:
+
+```bash
+chmod +x Trackwright-*-x86_64.AppImage
+./Trackwright-*-x86_64.AppImage
+```
+
+MKVToolNix ≥ 70 must be installed on your system (`sudo pacman -S mkvtoolnix-cli`,
+`sudo apt install mkvtoolnix`, …); the AppImage does not bundle it.
+
+### Build from source
 
 **Requirements:** Linux (built for KDE Plasma on Wayland; X11 works too), MKVToolNix ≥ 70,
 Rust ≥ 1.95, and `xdg-desktop-portal` for the file dialogs (`xdg-desktop-portal-kde` on KDE).
@@ -78,24 +94,24 @@ included [`packaging/PKGBUILD`](packaging/PKGBUILD).
 
 | Method | How |
 |---|---|
-| Source folder | Type a path and press Enter, or use *Durchsuchen …* (Browse). All `*.mkv` files are loaded recursively. |
-| Single files | *Dateien hinzufügen …* (Add files) |
+| Source folder | Type a path and press Enter, or use *Browse …*. All `*.mkv` files are loaded recursively. |
+| Single files | *Add files …* |
 | Drag & drop | Drop files or folders anywhere on the window. |
 
-The list shows name, size and track counts (`V`ideo / `A`udio / `U`ntertitel, i.e. subtitles).
+The list shows name, size and track counts (`V`ideo / `A`udio / `S`ubtitles).
 ⚠ marks files that contain tracks without a language. Click a file to see its tracks: ID, type,
 number, language, codec, channels, name, Default and Forced.
 
-### 2. Choose what to keep (*⚙ Mux-Einstellungen* tab)
+### 2. Choose what to keep (*⚙ Mux settings* tab)
 
 | Setting | Effect |
 |---|---|
-| **Destination folder** (*Zielordner*) | Results are written there, mirroring the folder structure below the source folder. **Leave it empty to replace the originals**; you are asked to confirm before the run starts. |
-| **Keep only these audio tracks** (*Nur diese Audios behalten*) | Multi-select built from all loaded files, by *number* (Audio 1, 2, …), *language* (German, Japanese, undefined, …) or *name*. A track is kept if it matches **any** checked entry. Nothing checked means all audio tracks are dropped. |
-| **Make this audio track the default** (*Diese Audio als Standard*) | Tri-state checkbox: **half** = the chosen track becomes *Default*, **full** = *Default* **and** *Forced*. Every other track of that type loses the flag. *None* clears *Default* everywhere. |
+| **Destination folder** | Results are written there, mirroring the folder structure below the source folder. **Leave it empty to replace the originals**; you are asked to confirm before the run starts. |
+| **Keep only these audio tracks** | Multi-select built from all loaded files, by *number* (Audio 1, 2, …), *language* (German, Japanese, undefined, …) or *name*. A track is kept if it matches **any** checked entry. Nothing checked means all audio tracks are dropped. |
+| **Make this audio the default** | Tri-state checkbox: **half** = the chosen track becomes *Default*, **full** = *Default* **and** *Forced*. Every other track of that type loses the flag. *None* clears *Default* everywhere. |
 | **Subtitles** | The same two rows for subtitle tracks. |
-| **Abort on errors** (*Bei Fehlern abbrechen*) | The first error stops the rest of the queue. |
-| **Without trash** (*Ohne Papierkorb*) | Only when replacing. On shares without a trash can (SMB/NFS), the original is moved to `_trackwright-original/` instead of the file being refused. |
+| **Abort on errors** | The first error stops the rest of the queue. |
+| **Without trash** | Only when replacing. On shares without a trash can (SMB/NFS), the original is moved to `_trackwright-original/` instead of the file being refused. |
 
 <p align="center">
   <img src="docs/screenshot-mux.png" alt="Trackwright: mux settings keeping German and Japanese audio, with the queue showing the planned action per file" width="900">
@@ -118,15 +134,16 @@ Every file gets one of these actions:
 If a file **lacks a track you selected** (for example "Audio 3" or "language jpn"), it is skipped
 and marked red. Trackwright never silently keeps less than you asked for.
 
-*▶ Starten* (Start) processes the queue one file at a time, with per-file and overall progress and a log.
-*⏹ Abbrechen* (Cancel) stops the running process immediately. When a file is done, the **Size** column changes
+*▶ Start* processes the queue one file at a time, with per-file and overall progress and a log.
+*⏹ Cancel* stops the running process immediately. When a file is done, the **Size** column changes
 from the original size to `before → after (±x %)`, and the status bar shows the total for the run.
 
 ### Settings
 
-Open **⚙ Einstellungen** (Settings, top right) to set a **fixed output folder**. It is saved in
+Open **⚙ Settings** (top right) to choose the **language** (English or German) and a
+**fixed output folder**. It is saved in
 `~/.config/trackwright/gui.json` and filled in as the destination on every start. You can still
-change the destination for a single run in the *Mux-Einstellungen* tab. Leave it empty to replace
+change the destination for a single run in the *Mux settings* tab. Leave it empty to replace
 originals by default.
 
 ### Drag & drop on Wayland
@@ -197,8 +214,21 @@ window, runs a real batch and captures it:
 cargo test -p trackwright-gui --release -- --ignored readme_screenshots
 ```
 
-The UI itself is in German. All UI strings live in `crates/gui/src/strings.rs`, so a translation
-only needs to touch that file.
+**Translations.** English is the default, German the alternative. UI strings live in
+`crates/gui/src/strings.rs`; messages from the core use the `tr!("English", "Deutsch")` macro from
+`crates/core/src/i18n.rs`. The language is stored in `~/.config/trackwright/gui.json`.
+
+### Releases
+
+Pushing a tag that matches the version in `Cargo.toml` builds an AppImage on CI and publishes it as
+a GitHub release ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Starting the workflow manually only builds the AppImage and attaches it to the run as an artifact.
 
 ## License
 

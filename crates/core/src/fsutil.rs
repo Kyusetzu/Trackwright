@@ -64,10 +64,12 @@ pub fn collect_mkv(inputs: &[PathBuf]) -> (Vec<FoundFile>, Vec<String>) {
                     root: input.parent().map(Path::to_path_buf).unwrap_or_default(),
                 });
             } else {
-                errors.push(format!("{}: keine .mkv-Datei", input.display()));
+                let p = input.display();
+                errors.push(crate::tr!("{p}: not an .mkv file", "{p}: keine .mkv-Datei"));
             }
         } else {
-            errors.push(format!("{}: nicht gefunden", input.display()));
+            let p = input.display();
+            errors.push(crate::tr!("{p}: not found", "{p}: nicht gefunden"));
         }
     }
     found.sort_by(|a, b| a.path.cmp(&b.path));

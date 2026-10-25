@@ -409,7 +409,7 @@ mod tests {
         assert_eq!(s.write_bytes, 4_000_000_000);
         assert_eq!(m.work().len(), 2);
         let err = m.plans[2].clone().expect("probed").expect_err("skip");
-        assert!(err.contains("nicht vorhanden"), "{err}");
+        assert!(err.contains("not present"), "{err}");
     }
 
     #[test]

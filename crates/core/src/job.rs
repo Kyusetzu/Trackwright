@@ -10,10 +10,12 @@ use crate::exec::{self, ExecEvent};
 use crate::fsutil::{
     FAILED_SUFFIX, ORIGINAL_DIR, TMP_SUFFIX, free_path, is_network_fs, with_suffix,
 };
+use crate::i18n::t;
 use crate::model::MediaInfo;
 use crate::plan::{FilePlan, Strategy};
 use crate::probe::probe;
 use crate::tools::{ToolCommand, Tools};
+use crate::tr;
 use crate::verify::verify;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -78,16 +80,21 @@ pub fn output_path(source: &Path, root: Option<&Path>, mode: &OutputMode) -> Res
     match mode {
         OutputMode::Replace { .. } => Ok(source.to_path_buf()),
         OutputMode::Directory { dir } => {
-            let file_name = source
-                .file_name()
-                .ok_or_else(|| Error::Unsafe(format!("{}: kein Dateiname", source.display())))?;
+            let file_name = source.file_name().ok_or_else(|| {
+                let p = source.display();
+                Error::Unsafe(tr!("{p}: no file name", "{p}: kein Dateiname"))
+            })?;
             let rel_dir = root
                 .and_then(|r| source.parent()?.strip_prefix(r).ok())
                 .unwrap_or_else(|| Path::new(""));
             let out = dir.join(rel_dir).join(file_name);
             if same_file(&out, source) {
                 return Err(Error::Unsafe(
-                    "Ausgabeordner entspricht dem Quellordner".into(),
+                    t(
+                        "output folder is the same as the source folder",
+                        "Ausgabeordner entspricht dem Quellordner",
+                    )
+                    .into(),
                 ));
             }
             Ok(out)
@@ -128,9 +135,10 @@ fn check_unchanged(media: &MediaInfo) -> Result<()> {
     let changed =
         meta.len() != media.size || (media.mtime.is_some() && meta.modified().ok() != media.mtime);
     if changed {
-        return Err(Error::Unsafe(format!(
-            "{} wurde seit dem Einlesen verändert – bitte neu einlesen",
-            media.path.display()
+        let p = media.path.display();
+        return Err(Error::Unsafe(tr!(
+            "{p} was modified since it was scanned – please rescan",
+            "{p} wurde seit dem Einlesen verändert – bitte neu einlesen"
         )));
     }
     Ok(())
@@ -140,16 +148,23 @@ fn check_unchanged(media: &MediaInfo) -> Result<()> {
 fn check_writable(path: &Path) -> Result<()> {
     let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
     if meta.permissions().readonly() {
-        return Err(Error::Unsafe(format!(
-            "{} ist schreibgeschützt",
-            path.display()
+        let p = path.display();
+        return Err(Error::Unsafe(tr!(
+            "{p} is read-only",
+            "{p} ist schreibgeschützt"
         )));
     }
     // Öffnen zum Schreiben ändert nichts (kein truncate), schlägt aber bei fehlenden Rechten fehl.
     std::fs::OpenOptions::new()
         .write(true)
         .open(path)
-        .map_err(|e| Error::Unsafe(format!("{} ist nicht beschreibbar: {e}", path.display())))?;
+        .map_err(|e| {
+            let p = path.display();
+            Error::Unsafe(tr!(
+                "{p} is not writable: {e}",
+                "{p} ist nicht beschreibbar: {e}"
+            ))
+        })?;
     Ok(())
 }
 
@@ -200,10 +215,11 @@ pub fn run_job(
         (Strategy::Propedit, false) => {
             let tmp = prepare_tmp(source, &target)?;
             let result = (|| {
-                on_event(JobEvent::Log(format!("kopiere nach {}", tmp.display())));
+                let p = tmp.display();
+                on_event(JobEvent::Log(tr!("copying to {p}", "kopiere nach {p}")));
                 copy_with_cancel(source, &tmp, cancel, on_event)?;
                 let cmd = propedit_command(plan, &tmp)
-                    .ok_or_else(|| Error::Verify("keine Änderungen".into()))?;
+                    .ok_or_else(|| Error::Verify(t("no changes", "keine Änderungen").into()))?;
                 run_tool(&cmd, tools, cancel, on_event, &mut report)?;
                 Ok(())
             })();
@@ -275,9 +291,10 @@ fn tmp_path(source: &Path, target: &Path) -> PathBuf {
 }
 
 fn prepare_tmp(source: &Path, target: &Path) -> Result<PathBuf> {
-    let dir = target
-        .parent()
-        .ok_or_else(|| Error::Unsafe(format!("{}: kein Verzeichnis", target.display())))?;
+    let dir = target.parent().ok_or_else(|| {
+        let p = target.display();
+        Error::Unsafe(tr!("{p}: no directory", "{p}: kein Verzeichnis"))
+    })?;
     std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     let tmp = tmp_path(source, target);
     // Reste eines abgebrochenen Laufs gehören uns.
@@ -295,8 +312,8 @@ fn run_tool(
     on_event(JobEvent::Log(cmd.to_shell()));
     let outcome = exec::run(cmd, tools, cancel, &mut |ev| match ev {
         ExecEvent::Progress(p) => on_event(JobEvent::Progress(p)),
-        ExecEvent::Warning(w) => on_event(JobEvent::Log(format!("Warnung: {w}"))),
-        ExecEvent::Error(e) => on_event(JobEvent::Log(format!("Fehler: {e}"))),
+        ExecEvent::Warning(w) => on_event(JobEvent::Log(tr!("Warning: {w}", "Warnung: {w}"))),
+        ExecEvent::Error(e) => on_event(JobEvent::Log(tr!("Error: {e}", "Fehler: {e}"))),
         ExecEvent::Output(_) => {}
     })?;
     report.warnings.extend(outcome.warnings);
@@ -331,14 +348,23 @@ fn verify_tmp(
         );
         let kept = std::fs::rename(tmp, &failed).is_ok();
         let msg = problems.join("; ");
-        on_event(JobEvent::Log(format!("Prüfung fehlgeschlagen: {msg}")));
+        on_event(JobEvent::Log(tr!(
+            "Verification failed: {msg}",
+            "Prüfung fehlgeschlagen: {msg}"
+        )));
         return Err(Error::Verify(if kept {
-            format!("{msg} – Ergebnis behalten als {}", failed.display())
+            let p = failed.display();
+            tr!(
+                "{msg} – result kept as {p}",
+                "{msg} – Ergebnis behalten als {p}"
+            )
         } else {
             msg
         }));
     }
-    on_event(JobEvent::Log("Prüfung bestanden".into()));
+    on_event(JobEvent::Log(
+        t("Verification passed", "Prüfung bestanden").into(),
+    ));
     Ok(())
 }
 
@@ -352,10 +378,10 @@ fn finish_tmp(
 ) -> Result<()> {
     verify_tmp(plan, tools, tmp, target, result, on_event)?;
     if target.exists() {
-        return Err(Error::Unsafe(format!(
-            "Ziel existiert inzwischen: {} – Ergebnis liegt in {}",
-            target.display(),
-            tmp.display()
+        let (a, b) = (target.display(), tmp.display());
+        return Err(Error::Unsafe(tr!(
+            "target now exists: {a} – result is in {b}",
+            "Ziel existiert inzwischen: {a} – Ergebnis liegt in {b}"
         )));
     }
     std::fs::rename(tmp, target).map_err(|e| Error::io(target, e))
@@ -400,11 +426,13 @@ fn check_original_can_move(source: &Path, mode: &OutputMode) -> Result<()> {
         return Ok(());
     };
     if is_network_fs(source) && !fallback_dir {
-        return Err(Error::Unsafe(format!(
-            "{} liegt auf einer Netzwerkfreigabe ohne Papierkorb. „Original ersetzen“ ist hier \
+        let p = source.display();
+        return Err(Error::Unsafe(tr!(
+            "{p} is on a network share without a trash. \"Replace original\" is disabled here – \
+             allow the \"{ORIGINAL_DIR}/\" folder in the settings or choose a different output mode",
+            "{p} liegt auf einer Netzwerkfreigabe ohne Papierkorb. „Original ersetzen“ ist hier \
              gesperrt – Ordner „{ORIGINAL_DIR}/“ in den Einstellungen erlauben oder einen anderen \
-             Ausgabemodus wählen",
-            source.display()
+             Ausgabemodus wählen"
         )));
     }
     Ok(())
@@ -416,7 +444,8 @@ fn move_original_away(source: &Path, mode: &OutputMode) -> Result<OriginalLocati
         match trash::delete(source) {
             Ok(()) => return Ok(OriginalLocation::Trash),
             Err(e) if !fallback => {
-                return Err(Error::Unsafe(format!(
+                return Err(Error::Unsafe(tr!(
+                    "original could not be moved to the trash: {e}",
                     "Original konnte nicht in den Papierkorb verschoben werden: {e}"
                 )));
             }
@@ -425,12 +454,16 @@ fn move_original_away(source: &Path, mode: &OutputMode) -> Result<OriginalLocati
     }
     if !fallback {
         return Err(Error::Unsafe(
-            "Papierkorb nicht verfügbar und Ordner-Fallback nicht erlaubt".into(),
+            t(
+                "trash unavailable and folder fallback not allowed",
+                "Papierkorb nicht verfügbar und Ordner-Fallback nicht erlaubt",
+            )
+            .into(),
         ));
     }
     let dir = source
         .parent()
-        .ok_or_else(|| Error::Unsafe("kein Elternverzeichnis".into()))?
+        .ok_or_else(|| Error::Unsafe(t("no parent directory", "kein Elternverzeichnis").into()))?
         .join(ORIGINAL_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
     let dest = free_path(&dir.join(source.file_name().unwrap_or_default()));
@@ -450,8 +483,8 @@ fn run_propedit_in_place(
 ) -> Result<()> {
     let source = &plan.path;
     check_writable(source)?;
-    let cmd =
-        propedit_command(plan, source).ok_or_else(|| Error::Verify("keine Änderungen".into()))?;
+    let cmd = propedit_command(plan, source)
+        .ok_or_else(|| Error::Verify(t("no changes", "keine Änderungen").into()))?;
     // mkvpropedit wird nicht mitten im Schreiben abgebrochen; Abbruch greift davor.
     let never = AtomicBool::new(false);
     if cancel.load(Ordering::Relaxed) {
@@ -460,7 +493,9 @@ fn run_propedit_in_place(
     run_tool(&cmd, tools, &never, on_event, report)?;
     let info = probe(tools, source)?;
     verify(plan, &info).map_err(|p| Error::Verify(p.join("; ")))?;
-    on_event(JobEvent::Log("Prüfung bestanden".into()));
+    on_event(JobEvent::Log(
+        t("Verification passed", "Prüfung bestanden").into(),
+    ));
     Ok(())
 }
 

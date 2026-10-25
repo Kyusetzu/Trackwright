@@ -167,16 +167,16 @@ mod tests {
             .status()
             .is_ok_and(|s| s.success());
         assert!(ok, "Fixtures konnten nicht erzeugt werden");
-        let src = tmp.path().join("Beispielserie");
+        let src = tmp.path().join("Example Show");
         std::fs::create_dir_all(&src).expect("mkdir");
         for i in 1..=6 {
             std::fs::copy(
                 raw.join("full.mkv"),
-                src.join(format!("Beispielserie S01E0{i}.mkv")),
+                src.join(format!("Example Show S01E0{i}.mkv")),
             )
             .expect("copy");
         }
-        std::fs::copy(raw.join("und.mkv"), src.join("Beispielserie Bonus.mkv")).expect("copy");
+        std::fs::copy(raw.join("und.mkv"), src.join("Example Show Bonus.mkv")).expect("copy");
         let out = tmp.path().join("Fertig");
 
         struct Shot {
@@ -238,8 +238,8 @@ mod tests {
                     0 => {
                         if m.files.len() == 7 && m.files.iter().all(|f| f.media().is_some()) {
                             // Nur für die Anzeige: lesbare statt /tmp-Pfade.
-                            m.source_path = "~/Videos/Beispielserie".into();
-                            m.destination = "~/Videos/Fertig".into();
+                            m.source_path = "~/Videos/Example Show".into();
+                            m.destination = "~/Videos/Done".into();
                             m.audio.keep_enabled = true;
                             m.audio.keep.insert(TrackRef::Lang(Lang::parse("ger")));
                             m.audio.keep.insert(TrackRef::Lang(Lang::parse("jpn")));

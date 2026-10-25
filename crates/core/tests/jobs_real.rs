@@ -321,7 +321,7 @@ fn readonly_file_is_refused_and_untouched() {
     let (media, plan) = plan_for(&tools, &path, &flags_only());
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).expect("chmod");
     let err = run(&tools, &media, &plan, None, &replace()).expect_err("ro");
-    assert!(err.to_string().contains("schreibgeschützt"), "{err}");
+    assert!(err.to_string().contains("read-only"), "{err}");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).expect("chmod");
     assert!(probe(&tools, &path).expect("probe").tracks[1].flags.default);
 }
@@ -344,7 +344,7 @@ fn modified_since_probe_is_refused() {
         &into_dir(&dir.path().join("o")),
     )
     .expect_err("geändert");
-    assert!(err.to_string().contains("verändert"), "{err}");
+    assert!(err.to_string().contains("modified"), "{err}");
 }
 
 // ---------------------------------------------------------------------------------------------

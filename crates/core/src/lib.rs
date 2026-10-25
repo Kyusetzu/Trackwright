@@ -9,6 +9,7 @@ pub mod env;
 pub mod error;
 pub mod exec;
 pub mod fsutil;
+pub mod i18n;
 pub mod job;
 pub mod lang;
 pub mod model;

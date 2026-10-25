@@ -2,12 +2,13 @@
 pkgname=trackwright
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="MKV-Spuren im Batch entfernen und Standard/Forced setzen (GUI, nutzt MKVToolNix)"
+pkgdesc="Batch-remove MKV audio/subtitle tracks and set default/forced flags (GUI for MKVToolNix)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Kyusetzu/Trackwright"
 license=('AGPL-3.0-or-later')
 depends=('mkvtoolnix-cli' 'gcc-libs' 'glibc' 'libxkbcommon' 'wayland' 'vulkan-icd-loader' 'xdg-desktop-portal')
-optdepends=('libx11: X11-Sitzungen' 'libxcursor: X11-Sitzungen')
+# winit lädt X11-Bibliotheken zur Laufzeit; die GUI läuft standardmäßig über XWayland.
+depends+=("libx11" "libxcursor" "libxi" "libxrandr")
 makedepends=('cargo' 'git')
 source=("$pkgname::git+$url.git#tag=v$pkgver")
 sha256sums=('SKIP')

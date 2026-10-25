@@ -1,4 +1,4 @@
-//! Dauerhafte GUI-Einstellungen in `~/.config/trackwright/gui.json`.
+//! Dauerhafte GUI-Einstellungen (Sprache, fester Ausgabeordner) in `~/.config/trackwright/gui.json`.
 
 use std::path::{Path, PathBuf};
 
@@ -10,6 +10,8 @@ use trackwright_core::fsutil::config_dir;
 pub struct Settings {
     /// Fester Ausgabeordner; leer = Originale ersetzen.
     pub output_dir: String,
+    /// Sprache der Oberfläche („en“, „de“); leer oder unbekannt = Englisch.
+    pub language: String,
 }
 
 impl Settings {
@@ -45,6 +47,7 @@ mod tests {
         assert_eq!(Settings::load(&path), Settings::default());
         let s = Settings {
             output_dir: "/media/fertig".into(),
+            language: "de".into(),
         };
         s.save(&path).expect("save");
         assert_eq!(Settings::load(&path), s);

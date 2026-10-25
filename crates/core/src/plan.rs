@@ -25,9 +25,17 @@ pub enum Change {
 
 impl fmt::Display for Change {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let onoff = |b: bool| if b { "an" } else { "aus" };
+        let onoff = |b: bool| {
+            if b {
+                crate::i18n::t("on", "an")
+            } else {
+                crate::i18n::t("off", "aus")
+            }
+        };
         match self {
-            Change::Default(b) => write!(f, "Standard {}", onoff(*b)),
+            Change::Default(b) => {
+                write!(f, "{} {}", crate::i18n::t("Default", "Standard"), onoff(*b))
+            }
             Change::Forced(b) => write!(f, "Forced {}", onoff(*b)),
         }
     }
@@ -44,9 +52,9 @@ pub enum TrackStatus {
 impl TrackStatus {
     pub fn label(self) -> &'static str {
         match self {
-            TrackStatus::Removed => "entfernt",
-            TrackStatus::Changed => "geändert",
-            TrackStatus::Unchanged => "unverändert",
+            TrackStatus::Removed => crate::i18n::t("removed", "entfernt"),
+            TrackStatus::Changed => crate::i18n::t("changed", "geändert"),
+            TrackStatus::Unchanged => crate::i18n::t("unchanged", "unverändert"),
         }
     }
 }
@@ -93,14 +101,14 @@ impl TrackPlan {
         }
     }
 
-    /// Kurzbeschreibung, z. B. „Audio 2 (ID 2) · jpn · AAC“.
+    /// Kurzbeschreibung, z. B. "Audio 2 (ID 2) · jpn · AAC".
     pub fn label(&self) -> String {
         let mut s = format!(
             "{} {} (ID {}) · {} · {}",
             self.kind, self.type_index, self.id, self.before.lang, self.codec
         );
         if let Some(n) = self.before.name.as_deref().filter(|n| !n.is_empty()) {
-            s.push_str(&format!(" · „{n}“"));
+            s.push_str(&crate::tr!(" · \"{n}\"", " · „{n}“"));
         }
         s
     }
@@ -120,9 +128,11 @@ pub enum Strategy {
 impl Strategy {
     pub fn label(self) -> &'static str {
         match self {
-            Strategy::Nothing => "nichts zu tun",
-            Strategy::Propedit => "mkvpropedit (in place)",
-            Strategy::Remux => "mkvmerge (Remux)",
+            Strategy::Nothing => crate::i18n::t("nothing to do", "nichts zu tun"),
+            Strategy::Propedit => {
+                crate::i18n::t("mkvpropedit (in place)", "mkvpropedit (in place)")
+            }
+            Strategy::Remux => crate::i18n::t("mkvmerge (remux)", "mkvmerge (Remux)"),
         }
     }
 }
@@ -188,7 +198,7 @@ impl FilePlan {
             s.push_str(&format!("  {mark} {}", t.label()));
             let changes = t.changes();
             if status == TrackStatus::Removed {
-                s.push_str("  [entfernt]");
+                s.push_str(&format!("  [{}]", TrackStatus::Removed.label()));
             } else if !changes.is_empty() {
                 let c: Vec<String> = changes.iter().map(|c| c.to_string()).collect();
                 s.push_str(&format!("  [{}]", c.join(", ")));

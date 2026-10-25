@@ -1,5 +1,5 @@
 //! Sprachcodes: Normalisierung von ISO 639-2/B, ISO 639-2/T und BCP 47 auf einen gemeinsamen
-//! Schlüssel und deutsche Anzeigenamen.
+//! Schlüssel und Anzeigenamen (Englisch/Deutsch).
 //!
 //! `und`, leere Werte und fehlende Felder gelten als [`Lang::Undefined`] und sind ein
 //! eigener Wert: Sie treffen nie stillschweigend eine echte Sprache.
@@ -15,70 +15,74 @@ struct LangEntry {
     terminologic: Option<&'static str>,
     /// ISO 639-1, falls vorhanden (z. B. `de`). Bevorzugter BCP-47-Primärtag.
     two_letter: Option<&'static str>,
+    /// Englischer Anzeigename.
+    display_en: &'static str,
     /// Deutscher Anzeigename.
-    display: &'static str,
+    display_de: &'static str,
 }
 
 const fn e(
     bibliographic: &'static str,
     terminologic: Option<&'static str>,
     two_letter: Option<&'static str>,
-    display: &'static str,
+    display_en: &'static str,
+    display_de: &'static str,
 ) -> LangEntry {
     LangEntry {
         bibliographic,
         terminologic,
         two_letter,
-        display,
+        display_en,
+        display_de,
     }
 }
 
 #[rustfmt::skip]
 static TABLE: &[LangEntry] = &[
-    e("ger", Some("deu"), Some("de"), "Deutsch"),
-    e("eng", None, Some("en"), "Englisch"),
-    e("jpn", None, Some("ja"), "Japanisch"),
-    e("fre", Some("fra"), Some("fr"), "Französisch"),
-    e("spa", None, Some("es"), "Spanisch"),
-    e("ita", None, Some("it"), "Italienisch"),
-    e("por", None, Some("pt"), "Portugiesisch"),
-    e("rus", None, Some("ru"), "Russisch"),
-    e("chi", Some("zho"), Some("zh"), "Chinesisch"),
-    e("kor", None, Some("ko"), "Koreanisch"),
-    e("dut", Some("nld"), Some("nl"), "Niederländisch"),
-    e("pol", None, Some("pl"), "Polnisch"),
-    e("swe", None, Some("sv"), "Schwedisch"),
-    e("nor", None, Some("no"), "Norwegisch"),
-    e("dan", None, Some("da"), "Dänisch"),
-    e("fin", None, Some("fi"), "Finnisch"),
-    e("tur", None, Some("tr"), "Türkisch"),
-    e("ara", None, Some("ar"), "Arabisch"),
-    e("hin", None, Some("hi"), "Hindi"),
-    e("cze", Some("ces"), Some("cs"), "Tschechisch"),
-    e("hun", None, Some("hu"), "Ungarisch"),
-    e("gre", Some("ell"), Some("el"), "Griechisch"),
-    e("heb", None, Some("he"), "Hebräisch"),
-    e("tha", None, Some("th"), "Thailändisch"),
-    e("vie", None, Some("vi"), "Vietnamesisch"),
-    e("ukr", None, Some("uk"), "Ukrainisch"),
-    e("ind", None, Some("id"), "Indonesisch"),
-    e("may", Some("msa"), Some("ms"), "Malaiisch"),
-    e("rum", Some("ron"), Some("ro"), "Rumänisch"),
-    e("bul", None, Some("bg"), "Bulgarisch"),
-    e("hrv", None, Some("hr"), "Kroatisch"),
-    e("srp", None, Some("sr"), "Serbisch"),
-    e("slo", Some("slk"), Some("sk"), "Slowakisch"),
-    e("slv", None, Some("sl"), "Slowenisch"),
-    e("cat", None, Some("ca"), "Katalanisch"),
-    e("est", None, Some("et"), "Estnisch"),
-    e("lav", None, Some("lv"), "Lettisch"),
-    e("lit", None, Some("lt"), "Litauisch"),
-    e("ice", Some("isl"), Some("is"), "Isländisch"),
-    e("per", Some("fas"), Some("fa"), "Persisch"),
-    e("tam", None, Some("ta"), "Tamil"),
-    e("tel", None, Some("te"), "Telugu"),
-    e("tgl", None, Some("tl"), "Tagalog"),
-    e("lat", None, Some("la"), "Latein"),
+    e("ger", Some("deu"), Some("de"), "German", "Deutsch"),
+    e("eng", None, Some("en"), "English", "Englisch"),
+    e("jpn", None, Some("ja"), "Japanese", "Japanisch"),
+    e("fre", Some("fra"), Some("fr"), "French", "Französisch"),
+    e("spa", None, Some("es"), "Spanish", "Spanisch"),
+    e("ita", None, Some("it"), "Italian", "Italienisch"),
+    e("por", None, Some("pt"), "Portuguese", "Portugiesisch"),
+    e("rus", None, Some("ru"), "Russian", "Russisch"),
+    e("chi", Some("zho"), Some("zh"), "Chinese", "Chinesisch"),
+    e("kor", None, Some("ko"), "Korean", "Koreanisch"),
+    e("dut", Some("nld"), Some("nl"), "Dutch", "Niederländisch"),
+    e("pol", None, Some("pl"), "Polish", "Polnisch"),
+    e("swe", None, Some("sv"), "Swedish", "Schwedisch"),
+    e("nor", None, Some("no"), "Norwegian", "Norwegisch"),
+    e("dan", None, Some("da"), "Danish", "Dänisch"),
+    e("fin", None, Some("fi"), "Finnish", "Finnisch"),
+    e("tur", None, Some("tr"), "Turkish", "Türkisch"),
+    e("ara", None, Some("ar"), "Arabic", "Arabisch"),
+    e("hin", None, Some("hi"), "Hindi", "Hindi"),
+    e("cze", Some("ces"), Some("cs"), "Czech", "Tschechisch"),
+    e("hun", None, Some("hu"), "Hungarian", "Ungarisch"),
+    e("gre", Some("ell"), Some("el"), "Greek", "Griechisch"),
+    e("heb", None, Some("he"), "Hebrew", "Hebräisch"),
+    e("tha", None, Some("th"), "Thai", "Thailändisch"),
+    e("vie", None, Some("vi"), "Vietnamese", "Vietnamesisch"),
+    e("ukr", None, Some("uk"), "Ukrainian", "Ukrainisch"),
+    e("ind", None, Some("id"), "Indonesian", "Indonesisch"),
+    e("may", Some("msa"), Some("ms"), "Malay", "Malaiisch"),
+    e("rum", Some("ron"), Some("ro"), "Romanian", "Rumänisch"),
+    e("bul", None, Some("bg"), "Bulgarian", "Bulgarisch"),
+    e("hrv", None, Some("hr"), "Croatian", "Kroatisch"),
+    e("srp", None, Some("sr"), "Serbian", "Serbisch"),
+    e("slo", Some("slk"), Some("sk"), "Slovak", "Slowakisch"),
+    e("slv", None, Some("sl"), "Slovenian", "Slowenisch"),
+    e("cat", None, Some("ca"), "Catalan", "Katalanisch"),
+    e("est", None, Some("et"), "Estonian", "Estnisch"),
+    e("lav", None, Some("lv"), "Latvian", "Lettisch"),
+    e("lit", None, Some("lt"), "Lithuanian", "Litauisch"),
+    e("ice", Some("isl"), Some("is"), "Icelandic", "Isländisch"),
+    e("per", Some("fas"), Some("fa"), "Persian", "Persisch"),
+    e("tam", None, Some("ta"), "Tamil", "Tamil"),
+    e("tel", None, Some("te"), "Telugu", "Telugu"),
+    e("tgl", None, Some("tl"), "Tagalog", "Tagalog"),
+    e("lat", None, Some("la"), "Latin", "Latein"),
 ];
 
 fn find_entry(code: &str) -> Option<&'static LangEntry> {
@@ -149,12 +153,12 @@ impl Lang {
         }
     }
 
-    /// Deutscher Anzeigename, z. B. „Deutsch (ger)“.
+    /// Anzeigename in der UI-Sprache, z. B. „German (ger)“ / „Deutsch (ger)“.
     pub fn display_name(&self) -> String {
         match self {
-            Lang::Undefined => "undefiniert".to_string(),
+            Lang::Undefined => crate::i18n::t("undefined", "undefiniert").to_string(),
             Lang::Code(c) => match find_entry(c) {
-                Some(e) => format!("{} ({c})", e.display),
+                Some(e) => format!("{} ({c})", crate::i18n::t(e.display_en, e.display_de)),
                 None => c.clone(),
             },
         }
@@ -164,7 +168,7 @@ impl Lang {
 impl fmt::Display for Lang {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Lang::Undefined => f.write_str("undefiniert"),
+            Lang::Undefined => f.write_str(crate::i18n::t("undefined", "undefiniert")),
             Lang::Code(c) => f.write_str(c),
         }
     }

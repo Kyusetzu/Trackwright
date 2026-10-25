@@ -1,0 +1,82 @@
+name: Release
+
+# Ein Tag `v*` (z. B. `v0.2.0`, passend zur Version in Cargo.toml) baut ein AppImage und
+# veröffentlicht es als GitHub-Release. Manuell gestartet (workflow_dispatch) wird nur gebaut und
+# das AppImage als Artefakt hochgeladen – praktisch zum Testen.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  appimage:
+    # Ältere Basis = älteres glibc → läuft auf mehr Distributionen.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version bestimmen
+        id: version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME passt nicht zur Version $version in Cargo.toml"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Release-Build
+        run: cargo build -p trackwright-gui --release --locked
+
+      - name: AppImage bauen
+        env:
+          # Auf den Runnern gibt es kein FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          OUTPUT: Trackwright-${{ steps.version.outputs.version }}-x86_64.AppImage
+        run: |
+          curl -fsSL -o linuxdeploy \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy
+          ./linuxdeploy --appdir AppDir \
+            --executable target/release/trackwright-gui \
+            --desktop-file packaging/trackwright.desktop \
+            --icon-file packaging/trackwright.svg \
+            --output appimage
+          ls -l "$OUTPUT"
+
+      - name: AppImage prüfen
+        run: |
+          chmod +x Trackwright-*.AppImage
+          ./Trackwright-*.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/usr/bin/trackwright-gui
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Trackwright-${{ steps.version.outputs.version }}-x86_64.AppImage
+          path: Trackwright-*.AppImage
+          if-no-files-found: error
+
+      - name: GitHub-Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Trackwright-*.AppImage
+          generate_release_notes: true
+          body: |
+            **Requirements:** MKVToolNix ≥ 70 (`mkvmerge`, `mkvpropedit`) must be installed,
+            e.g. `sudo pacman -S mkvtoolnix-cli` or `sudo apt install mkvtoolnix`.
+
+            ```bash
+            chmod +x Trackwright-*-x86_64.AppImage
+            ./Trackwright-*-x86_64.AppImage
+            ```

@@ -1,7 +1,9 @@
 //! Prüfung des Ergebnisses gegen den Plan.
 
+use crate::i18n::t;
 use crate::model::MediaInfo;
 use crate::plan::FilePlan;
+use crate::tr;
 
 /// Maximale Abweichung der Dauer ohne entfernte Spuren und maximale Verlängerung (1 s).
 pub const MAX_DURATION_DIFF_NS: u64 = 1_000_000_000;
@@ -31,73 +33,86 @@ pub fn allowed_shortening_ns(plan: &FilePlan) -> u64 {
 pub fn verify(plan: &FilePlan, result: &MediaInfo) -> Result<(), Vec<String>> {
     let mut problems = Vec::new();
     if result.size == 0 {
-        problems.push("Zieldatei ist leer".to_string());
+        problems.push(t("target file is empty", "Zieldatei ist leer").to_string());
     }
     let expected: Vec<_> = plan.kept().collect();
     if expected.len() != result.tracks.len() {
-        problems.push(format!(
-            "{} Spuren erwartet, {} gefunden",
-            expected.len(),
-            result.tracks.len()
+        let (e, g) = (expected.len(), result.tracks.len());
+        problems.push(tr!(
+            "expected {e} tracks, found {g}",
+            "{e} Spuren erwartet, {g} gefunden"
         ));
     } else {
         for (i, (exp, got)) in expected.iter().zip(&result.tracks).enumerate() {
-            let label = format!("Spur {} ({} {})", i, exp.kind, exp.type_index);
+            let label = tr!(
+                "Track {i} ({} {})",
+                "Spur {i} ({} {})",
+                exp.kind,
+                exp.type_index
+            );
             if exp.kind != got.kind {
-                problems.push(format!("{label}: Typ {} statt {}", got.kind, exp.kind));
+                let (g, x) = (got.kind, exp.kind);
+                problems.push(tr!(
+                    "{label}: type {g} instead of {x}",
+                    "{label}: Typ {g} statt {x}"
+                ));
                 continue;
             }
             if got.lang() != exp.after.lang {
-                problems.push(format!(
-                    "{label}: Sprache {} statt {}",
-                    got.lang(),
-                    exp.after.lang
+                let (g, x) = (got.lang(), &exp.after.lang);
+                problems.push(tr!(
+                    "{label}: language {g} instead of {x}",
+                    "{label}: Sprache {g} statt {x}"
                 ));
             }
             let got_name = got.name.as_deref().filter(|n| !n.is_empty());
             if got_name != exp.after.name.as_deref() {
-                problems.push(format!(
-                    "{label}: Name „{}“ statt „{}“",
-                    got_name.unwrap_or(""),
-                    exp.after.name.as_deref().unwrap_or("")
+                let g = got_name.unwrap_or("");
+                let x = exp.after.name.as_deref().unwrap_or("");
+                problems.push(tr!(
+                    "{label}: name \"{g}\" instead of \"{x}\"",
+                    "{label}: Name „{g}“ statt „{x}“"
                 ));
             }
             if got.flags.default != exp.after.default {
-                problems.push(format!("{label}: Standard-Flag {}", got.flags.default));
+                let v = got.flags.default;
+                problems.push(tr!(
+                    "{label}: default flag {v}",
+                    "{label}: Standard-Flag {v}"
+                ));
             }
             if got.flags.forced != exp.after.forced {
-                problems.push(format!("{label}: Forced-Flag {}", got.flags.forced));
+                let v = got.flags.forced;
+                problems.push(tr!("{label}: forced flag {v}", "{label}: Forced-Flag {v}"));
             }
         }
     }
     if let (Some(before), Some(after)) = (plan.duration_ns, result.duration_ns) {
         let secs = |ns: u64| ns as f64 / 1e9;
         if after > before + MAX_DURATION_DIFF_NS {
-            problems.push(format!(
-                "Dauer ist länger geworden: {:.3} s statt {:.3} s",
-                secs(after),
-                secs(before)
+            let (a, b) = (secs(after), secs(before));
+            problems.push(tr!(
+                "duration became longer: {a:.3} s instead of {b:.3} s",
+                "Dauer ist länger geworden: {a:.3} s statt {b:.3} s"
             ));
         } else if before.saturating_sub(after) > allowed_shortening_ns(plan) {
-            problems.push(format!(
-                "Dauer weicht ab: {:.3} s statt {:.3} s (erlaubt: bis {:.1} s kürzer)",
-                secs(after),
-                secs(before),
-                secs(allowed_shortening_ns(plan))
+            let (a, b, c) = (secs(after), secs(before), secs(allowed_shortening_ns(plan)));
+            problems.push(tr!(
+                "duration differs: {a:.3} s instead of {b:.3} s (allowed: up to {c:.1} s shorter)",
+                "Dauer weicht ab: {a:.3} s statt {b:.3} s (erlaubt: bis {c:.1} s kürzer)"
             ));
         }
     }
     if result.attachments != plan.attachments {
-        problems.push(format!(
-            "{} Anhänge statt {}",
-            result.attachments, plan.attachments
+        let (a, b) = (result.attachments, plan.attachments);
+        problems.push(tr!(
+            "{a} attachments instead of {b}",
+            "{a} Anhänge statt {b}"
         ));
     }
     if result.chapters != plan.chapters {
-        problems.push(format!(
-            "{} Kapitel statt {}",
-            result.chapters, plan.chapters
-        ));
+        let (a, b) = (result.chapters, plan.chapters);
+        problems.push(tr!("{a} chapters instead of {b}", "{a} Kapitel statt {b}"));
     }
     if problems.is_empty() {
         Ok(())
@@ -146,7 +161,7 @@ mod tests {
         let m = media();
         let plan = plan_file(&m, &sel(Some(vec![1]), None)).expect("plan");
         let errs = verify(&plan, &m).expect_err("Spuranzahl");
-        assert!(errs[0].contains("Spuren erwartet"), "{errs:?}");
+        assert!(errs[0].contains("tracks, found"), "{errs:?}");
 
         let plan = plan_file(&m, &sel(None, Some(2))).expect("plan");
         let mut bad = m.clone();
@@ -155,7 +170,7 @@ mod tests {
         bad.attachments = 0;
         let errs = verify(&plan, &bad).expect_err("abweichend");
         let all = errs.join("\n");
-        for needle in ["leer", "Standard-Flag", "Dauer", "Anhänge"] {
+        for needle in ["empty", "default flag", "duration", "attachments"] {
             assert!(all.contains(needle), "{needle}: {all}");
         }
     }
@@ -184,7 +199,7 @@ mod tests {
         // Länger werden darf es nie.
         result.duration_ns = Some(1_424_000_000_000);
         let errs = verify(&plan, &result).expect_err("länger");
-        assert!(errs.iter().any(|e| e.contains("länger")), "{errs:?}");
+        assert!(errs.iter().any(|e| e.contains("longer")), "{errs:?}");
     }
 
     #[test]

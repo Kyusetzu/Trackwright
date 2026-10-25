@@ -15,11 +15,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use trackwright_core::env::check_tools;
+use trackwright_core::error::Error;
+use trackwright_core::i18n::{UiLang, set_lang};
 use trackwright_core::job::{OriginalLocation, planned_commands};
 use trackwright_core::model::TrackType;
 use trackwright_core::plan::Strategy;
 use trackwright_core::selection::{Options, TrackRef};
 use trackwright_core::tools::Tools;
+use trackwright_core::tr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -91,6 +94,7 @@ impl App {
 
     /// Übernimmt gespeicherte Einstellungen; ein fester Ausgabeordner wird Zielordner.
     pub fn apply_settings(&mut self, settings: Settings) {
+        set_lang(UiLang::from_code(&settings.language));
         self.model.destination = settings.output_dir.clone();
         self.model.mark_dirty();
         self.settings = settings;
@@ -122,10 +126,10 @@ impl App {
         match msg {
             Msg::Found { found, errors } => {
                 for e in errors {
-                    self.log(format!("Hinweis: {e}"));
+                    self.log(format!("{}: {e}", s::NOTE()));
                 }
                 if found.is_empty() {
-                    self.notice = Some("Keine .mkv-Dateien gefunden.".into());
+                    self.notice = Some(s::NO_MKV_FOUND().into());
                 }
                 let new = self.model.add_found(found);
                 self.worker.probe(new, false);
@@ -165,21 +169,22 @@ impl App {
                     }
                 }
                 self.log(if cancelled {
-                    "■ Abgebrochen".to_string()
+                    tr!("■ Cancelled", "■ Abgebrochen")
                 } else if aborted {
-                    "■ Wegen eines Fehlers abgebrochen („Bei Fehlern abbrechen“)".to_string()
+                    tr!(
+                        "■ Stopped after an error (“Abort on errors”)",
+                        "■ Wegen eines Fehlers abgebrochen („Bei Fehlern abbrechen“)"
+                    )
                 } else {
-                    "■ Fertig".to_string()
+                    tr!("■ Done", "■ Fertig")
                 });
                 if let Some(sizes) = self.running.take().map(|r| r.sizes)
                     && sizes.files > 0
                 {
-                    self.log(format!(
-                        "  {}: {} ({} Dateien)",
-                        s::SIZE_TOTAL,
-                        format_size_change(sizes.before, sizes.after),
-                        sizes.files
-                    ));
+                    let total = s::SIZE_TOTAL();
+                    let change = format_size_change(sizes.before, sizes.after);
+                    let files = files_label(sizes.files);
+                    self.log(format!("  {total}: {change} ({files})"));
                     self.last_run_sizes = Some(sizes);
                 }
             }
@@ -203,7 +208,7 @@ impl App {
                 if let Some(r) = &mut self.running {
                     r.done += 1;
                 }
-                self.log(format!("– {name}: übersprungen ({reason})"));
+                self.log(format!("– {name}: {} ({reason})", s::JOB_SKIPPED()));
                 self.model.files[i].job = JobState::Skipped(reason);
             }
             JobMsg::Done(result) => {
@@ -219,21 +224,30 @@ impl App {
                         // Status in der Liste ohne Pfade; das Log bekommt die Details.
                         let (mut status, mut log) = match &report.output {
                             Some(out) if out == path => {
-                                ("fertig".to_string(), "fertig".to_string())
+                                (s::JOB_DONE().to_string(), s::JOB_DONE().to_string())
                             }
-                            Some(out) => {
-                                ("fertig".to_string(), format!("fertig → {}", out.display()))
-                            }
-                            None => ("unverändert".to_string(), "unverändert".to_string()),
+                            Some(out) => (
+                                s::JOB_DONE().to_string(),
+                                format!("{} → {}", s::JOB_DONE(), out.display()),
+                            ),
+                            None => (
+                                s::JOB_UNCHANGED().to_string(),
+                                s::JOB_UNCHANGED().to_string(),
+                            ),
                         };
                         match &report.original_moved_to {
                             Some(OriginalLocation::Trash) => {
-                                status.push_str(" (Original im Papierkorb)");
-                                log.push_str(" (Original im Papierkorb)");
+                                let note = format!(" ({})", s::ORIGINAL_IN_TRASH());
+                                status.push_str(&note);
+                                log.push_str(&note);
                             }
                             Some(OriginalLocation::Folder(p)) => {
-                                status.push_str(" (Original verschoben)");
-                                log.push_str(&format!(" (Original: {})", p.display()));
+                                status.push_str(&format!(" ({})", s::ORIGINAL_MOVED()));
+                                log.push_str(&tr!(
+                                    " (original: {})",
+                                    " (Original: {})",
+                                    p.display()
+                                ));
                             }
                             None => {}
                         }
@@ -250,7 +264,7 @@ impl App {
                             }
                         }
                         for w in &report.warnings {
-                            self.log(format!("  Warnung: {w}"));
+                            self.log(tr!("  Warning: {w}", "  Warnung: {w}"));
                         }
                         self.log(format!("✓ {name}: {log}"));
                         self.model.files[i].job = JobState::Done(status);
@@ -259,8 +273,8 @@ impl App {
                             self.worker.probe(vec![path.to_path_buf()], true);
                         }
                     }
-                    Err(e) if cancelled && e == "abgebrochen" => {
-                        self.log(format!("■ {name}: abgebrochen"));
+                    Err(e) if cancelled && e == Error::Cancelled.to_string() => {
+                        self.log(format!("■ {name}: {}", s::JOB_CANCELLED()));
                         self.model.files[i].job = JobState::Cancelled;
                     }
                     Err(e) => {
@@ -304,7 +318,7 @@ impl App {
             })
             .collect();
         if items.is_empty() {
-            self.notice = Some(s::NOTHING_TO_DO.into());
+            self.notice = Some(s::NOTHING_TO_DO().into());
             return;
         }
         for item in &items {
@@ -313,7 +327,7 @@ impl App {
             }
         }
         let cancel = Arc::new(AtomicBool::new(false));
-        self.log(format!("■ Start: {} Dateien", items.len()));
+        self.log(format!("■ Start: {}", files_label(items.len())));
         self.running = Some(Running {
             cancel: cancel.clone(),
             total: items.len(),
@@ -353,10 +367,10 @@ impl App {
             ui.horizontal(|ui| {
                 ui.heading(s::APP_TITLE);
                 ui.separator();
-                ui.selectable_value(&mut self.tab, Tab::Videos, s::TAB_VIDEOS);
-                ui.selectable_value(&mut self.tab, Tab::Mux, s::TAB_MUX);
+                ui.selectable_value(&mut self.tab, Tab::Videos, s::TAB_VIDEOS());
+                ui.selectable_value(&mut self.tab, Tab::Mux, s::TAB_MUX());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(s::SETTINGS_BUTTON).clicked() && self.settings_draft.is_none() {
+                    if ui.button(s::SETTINGS_BUTTON()).clicked() && self.settings_draft.is_none() {
                         self.settings_draft = Some(self.settings.clone());
                     }
                 });
@@ -385,7 +399,7 @@ impl App {
             painter.text(
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
-                s::DROP_HINT,
+                s::DROP_HINT(),
                 egui::FontId::proportional(26.0),
                 Color32::WHITE,
             );
@@ -403,26 +417,39 @@ impl App {
         let mut open = true;
         let mut save = false;
         let mut pick = false;
-        egui::Window::new(s::SETTINGS_TITLE)
+        egui::Window::new(s::SETTINGS_TITLE())
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(s::SETTINGS_OUTPUT_DIR);
+                    ui.label(s::SETTINGS_LANGUAGE());
+                    let current = UiLang::from_code(&draft.language);
+                    egui::ComboBox::from_id_salt("settings-language")
+                        .selected_text(current.native_name())
+                        .show_ui(ui, |ui| {
+                            for l in UiLang::ALL {
+                                if ui.selectable_label(l == current, l.native_name()).clicked() {
+                                    draft.language = l.code().to_string();
+                                }
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label(s::SETTINGS_OUTPUT_DIR());
                     ui.add(
                         egui::TextEdit::singleline(&mut draft.output_dir)
-                            .hint_text(s::SETTINGS_OUTPUT_HINT)
+                            .hint_text(s::SETTINGS_OUTPUT_HINT())
                             .desired_width(360.0),
                     );
-                    pick = ui.button(s::CHOOSE).clicked();
-                    if ui.button(s::SETTINGS_CLEAR).clicked() {
+                    pick = ui.button(s::CHOOSE()).clicked();
+                    if ui.button(s::SETTINGS_CLEAR()).clicked() {
                         draft.output_dir.clear();
                     }
                 });
-                ui.weak(s::SETTINGS_OUTPUT_INFO);
+                ui.weak(s::SETTINGS_OUTPUT_INFO());
                 ui.add_space(6.0);
-                save = ui.button(s::SETTINGS_SAVE).clicked();
+                save = ui.button(s::SETTINGS_SAVE()).clicked();
             });
         if pick {
             let start = Some(PathBuf::from(draft.output_dir.trim())).filter(|p| p.is_dir());
@@ -432,11 +459,14 @@ impl App {
             let mut new = draft.clone();
             new.output_dir = new.output_dir.trim().to_string();
             let result = Settings::default_path()
-                .ok_or_else(|| "Kein Konfigurationsordner (HOME fehlt)".to_string())
+                .ok_or_else(|| s::SETTINGS_NO_CONFIG_DIR().to_string())
                 .and_then(|p| new.save(&p));
             match result {
                 Ok(()) => {
-                    self.log(s::SETTINGS_SAVED);
+                    set_lang(UiLang::from_code(&new.language));
+                    // Pläne und Skip-Gründe in der neuen Sprache neu erzeugen.
+                    self.model.mark_dirty();
+                    self.log(s::SETTINGS_SAVED());
                     if self.running.is_none() {
                         self.model.destination = new.output_dir.clone();
                         self.model.mark_dirty();
@@ -444,7 +474,7 @@ impl App {
                     self.settings = new;
                     self.settings_draft = None;
                 }
-                Err(e) => self.notice = Some(format!("Speichern fehlgeschlagen: {e}")),
+                Err(e) => self.notice = Some(format!("{}: {e}", s::SETTINGS_SAVE_FAILED())),
             }
         } else if !open {
             self.settings_draft = None;
@@ -455,7 +485,7 @@ impl App {
         self.settings_window(ctx);
         if let Some(text) = self.notice.clone() {
             let mut open = true;
-            egui::Window::new("Hinweis")
+            egui::Window::new(s::NOTE())
                 .collapsible(false)
                 .open(&mut open)
                 .show(ctx, |ui| {
@@ -470,19 +500,19 @@ impl App {
         }
         if self.confirm_replace {
             let mut decision = None;
-            egui::Window::new(s::CONFIRM_TITLE)
+            egui::Window::new(s::CONFIRM_TITLE())
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
                 .show(ctx, |ui| {
                     ui.set_max_width(460.0);
-                    ui.label(s::CONFIRM_TEXT);
+                    ui.label(s::CONFIRM_TEXT());
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button(s::CONFIRM_YES).clicked() {
+                        if ui.button(s::CONFIRM_YES()).clicked() {
                             decision = Some(true);
                         }
-                        if ui.button(s::CONFIRM_NO).clicked() {
+                        if ui.button(s::CONFIRM_NO()).clicked() {
                             decision = Some(false);
                         }
                     });
@@ -500,7 +530,7 @@ impl App {
         ui.horizontal(|ui| {
             match &self.tools_status {
                 Ok(v) => ui.weak(v),
-                Err(e) => ui.colored_label(RED, format!("{}: {e}", s::TOOLS_MISSING)),
+                Err(e) => ui.colored_label(RED, format!("{}: {e}", s::TOOLS_MISSING())),
             };
             ui.separator();
             let pending = self
@@ -512,14 +542,15 @@ impl App {
             ui.label(files_label(self.model.files.len()));
             if pending > 0 {
                 ui.spinner();
-                ui.label(format!("{pending} werden eingelesen"));
+                ui.label(tr!("{pending} being read", "{pending} werden eingelesen"));
             }
             ui.separator();
             let sum = self.model.summary();
-            ui.label(format!(
-                "{} Remux ({}), {} nur Header, {} unverändert, {} übersprungen",
+            let bytes = format_size(sum.write_bytes);
+            ui.label(tr!(
+                "{} remux ({bytes}), {} header only, {} unchanged, {} skipped",
+                "{} Remux ({bytes}), {} nur Header, {} unverändert, {} übersprungen",
                 sum.remux,
-                format_size(sum.write_bytes),
                 sum.propedit,
                 sum.nothing,
                 sum.skipped
@@ -535,14 +566,14 @@ impl App {
                 let saved = t.before.saturating_sub(t.after);
                 let text = format!(
                     "{}: {}",
-                    s::SIZE_TOTAL,
+                    s::SIZE_TOTAL(),
                     format_size_change(t.before, t.after)
                 );
                 ui.label(text).on_hover_text(format!(
-                    "{} Dateien, {} {}",
-                    t.files,
+                    "{}, {} {}",
+                    files_label(t.files),
                     format_size(saved),
-                    s::SIZE_SAVED
+                    s::SIZE_SAVED()
                 ));
             }
         });
@@ -553,10 +584,10 @@ impl App {
     fn videos_tab(&mut self, ui: &mut egui::Ui) {
         let running = self.running.is_some();
         ui.horizontal(|ui| {
-            ui.label(s::SOURCE_FOLDER);
+            ui.label(s::SOURCE_FOLDER());
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.model.source_path)
-                    .hint_text(s::SOURCE_HINT)
+                    .hint_text(s::SOURCE_HINT())
                     .desired_width(ui.available_width() - 260.0),
             );
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -565,22 +596,22 @@ impl App {
                     self.add_paths(vec![p]);
                 }
             }
-            if ui.button(s::BROWSE).clicked() {
+            if ui.button(s::BROWSE()).clicked() {
                 self.worker.pick(Pick::SourceFolder, None);
             }
-            if ui.button(s::ADD_FILES).clicked() {
+            if ui.button(s::ADD_FILES()).clicked() {
                 self.worker.pick(Pick::AddFiles, None);
             }
         });
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(!running, egui::Button::new(s::REMOVE_CHECKED))
+                .add_enabled(!running, egui::Button::new(s::REMOVE_CHECKED()))
                 .clicked()
             {
                 self.model.remove_where(|e| e.checked);
             }
             if ui
-                .add_enabled(!running, egui::Button::new(s::CLEAR_LIST))
+                .add_enabled(!running, egui::Button::new(s::CLEAR_LIST()))
                 .clicked()
             {
                 self.model.remove_where(|_| true);
@@ -591,7 +622,7 @@ impl App {
         if self.model.files.is_empty() {
             ui.vertical_centered(|ui| {
                 ui.add_space(80.0);
-                ui.label(RichText::new(s::DROP_HINT).size(20.0).weak());
+                ui.label(RichText::new(s::DROP_HINT()).size(20.0).weak());
             });
             return;
         }
@@ -614,7 +645,13 @@ impl App {
                 .column(Column::auto().at_least(140.0))
                 .header(22.0, |mut h| {
                     h.col(|_| {});
-                    for t in ["#", s::COL_NAME, s::COL_SIZE, s::COL_TRACKS, s::COL_STATUS] {
+                    for t in [
+                        "#",
+                        s::COL_NAME(),
+                        s::COL_SIZE(),
+                        s::COL_TRACKS(),
+                        s::COL_STATUS(),
+                    ] {
                         h.col(|ui| {
                             ui.strong(t);
                         });
@@ -638,15 +675,13 @@ impl App {
                         row.col(|ui| size_cell(ui, entry));
                         row.col(|ui| {
                             if let Some(m) = entry.media() {
-                                ui.label(format!(
-                                    "V{} A{} U{}",
-                                    m.count_of(TrackType::Video),
-                                    m.count_of(TrackType::Audio),
-                                    m.count_of(TrackType::Subtitles)
-                                ));
+                                let v = m.count_of(TrackType::Video);
+                                let a = m.count_of(TrackType::Audio);
+                                let u = m.count_of(TrackType::Subtitles);
+                                ui.label(tr!("V{v} A{a} S{u}", "V{v} A{a} U{u}"));
                                 if m.has_undefined_language() {
                                     ui.colored_label(YELLOW, "⚠")
-                                        .on_hover_text(s::UNDEFINED_BADGE);
+                                        .on_hover_text(s::UNDEFINED_BADGE());
                                 }
                             }
                         });
@@ -671,10 +706,10 @@ impl App {
             .and_then(|e| e.media())
             .cloned()
         else {
-            ui.weak(s::SELECT_FILE_HINT);
+            ui.weak(s::SELECT_FILE_HINT());
             return;
         };
-        ui.strong(format!("{} {}", s::TRACKS_OF, m.file_name()));
+        ui.strong(format!("{} {}", s::TRACKS_OF(), m.file_name()));
         ui.push_id("tracks", |ui| {
             TableBuilder::new(ui)
                 .striped(true)
@@ -690,15 +725,15 @@ impl App {
                 .column(Column::auto().at_least(56.0))
                 .header(20.0, |mut h| {
                     for t in [
-                        s::COL_ID,
-                        s::COL_TYPE,
-                        s::COL_NR,
-                        s::COL_LANG,
-                        s::COL_CODEC,
-                        s::COL_CHANNELS,
-                        s::COL_TRACK_NAME,
-                        s::COL_DEFAULT,
-                        s::COL_FORCED,
+                        s::COL_ID(),
+                        s::COL_TYPE(),
+                        s::COL_NR(),
+                        s::COL_LANG(),
+                        s::COL_CODEC(),
+                        s::COL_CHANNELS(),
+                        s::COL_TRACK_NAME(),
+                        s::COL_DEFAULT(),
+                        s::COL_FORCED(),
                     ] {
                         h.col(|ui| {
                             ui.strong(t);
@@ -736,19 +771,19 @@ impl App {
         let running = self.running.is_some();
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.strong(s::SETTINGS);
+            ui.strong(s::SETTINGS());
             ui.add_enabled_ui(!running, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(s::DESTINATION);
+                    ui.label(s::DESTINATION());
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut self.model.destination)
-                            .hint_text(s::DESTINATION_HINT)
+                            .hint_text(s::DESTINATION_HINT())
                             .desired_width(ui.available_width() - 90.0),
                     );
                     if r.changed() {
                         self.model.mark_dirty();
                     }
-                    if ui.button(s::CHOOSE).clicked() {
+                    if ui.button(s::CHOOSE()).clicked() {
                         self.worker.pick(Pick::Destination, None);
                     }
                 });
@@ -758,8 +793,12 @@ impl App {
                     .spacing([8.0, 6.0])
                     .show(ui, |ui| {
                         for (kind, keep_label, default_label) in [
-                            (TrackType::Audio, s::KEEP_AUDIOS, s::DEFAULT_AUDIO),
-                            (TrackType::Subtitles, s::KEEP_SUBTITLES, s::DEFAULT_SUBTITLE),
+                            (TrackType::Audio, s::KEEP_AUDIOS(), s::DEFAULT_AUDIO()),
+                            (
+                                TrackType::Subtitles,
+                                s::KEEP_SUBTITLES(),
+                                s::DEFAULT_SUBTITLE(),
+                            ),
                         ] {
                             let opts = self.model.options(kind).clone();
                             let c = self.model.controls_mut(kind);
@@ -784,10 +823,10 @@ impl App {
                     });
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.model.abort_on_errors, s::ABORT_ON_ERRORS);
+                    ui.checkbox(&mut self.model.abort_on_errors, s::ABORT_ON_ERRORS());
                     ui.add_enabled_ui(self.model.replaces_originals(), |ui| {
                         if ui
-                            .checkbox(&mut self.model.fallback_dir, s::FALLBACK_DIR)
+                            .checkbox(&mut self.model.fallback_dir, s::FALLBACK_DIR())
                             .changed()
                         {
                             self.model.mark_dirty();
@@ -802,22 +841,22 @@ impl App {
 
     fn queue(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.strong(s::QUEUE);
+            ui.strong(s::QUEUE());
             let work = self.model.work().len();
             if ui
                 .add_enabled(
                     self.can_start(),
-                    egui::Button::new(format!("{} ({work})", s::START)),
+                    egui::Button::new(format!("{} ({work})", s::START())),
                 )
                 .clicked()
             {
                 self.request_start();
             }
             if let Some(r) = &self.running
-                && ui.button(s::CANCEL).clicked()
+                && ui.button(s::CANCEL()).clicked()
             {
                 r.cancel.store(true, Ordering::Relaxed);
-                self.log("■ Abbruch angefordert …");
+                self.log(tr!("■ Cancellation requested …", "■ Abbruch angefordert …"));
             }
             if let Some(r) = &self.running {
                 let partial: f32 = self
@@ -832,7 +871,7 @@ impl App {
                 let progress = (r.done as f32 + partial) / r.total.max(1) as f32;
                 ui.add(
                     egui::ProgressBar::new(progress)
-                        .text(format!("{}: {}/{}", s::TOTAL, r.done, r.total))
+                        .text(format!("{}: {}/{}", s::TOTAL(), r.done, r.total))
                         .animate(true),
                 );
             }
@@ -855,7 +894,13 @@ impl App {
                 .column(Column::initial(260.0).at_least(120.0).clip(true))
                 .column(Column::initial(260.0).at_least(120.0).clip(true))
                 .header(22.0, |mut h| {
-                    for t in ["#", s::COL_NAME, s::COL_SIZE, s::COL_ACTION, s::COL_STATUS] {
+                    for t in [
+                        "#",
+                        s::COL_NAME(),
+                        s::COL_SIZE(),
+                        s::COL_ACTION(),
+                        s::COL_STATUS(),
+                    ] {
                         h.col(|ui| {
                             ui.strong(t);
                         });
@@ -880,13 +925,9 @@ impl App {
                         row.col(|ui| match &plan {
                             Some(Ok(p)) => {
                                 let (text, color) = match p.strategy {
-                                    Strategy::Remux => {
-                                        (format!("Remux (−{} Spuren)", p.removed_count()), YELLOW)
-                                    }
-                                    Strategy::Propedit => {
-                                        (format!("nur Header (~{})", p.changed_count()), GREEN)
-                                    }
-                                    Strategy::Nothing => ("nichts zu tun".into(), Color32::GRAY),
+                                    Strategy::Remux => (remux_label(p.removed_count()), YELLOW),
+                                    Strategy::Propedit => (header_label(p.changed_count()), GREEN),
+                                    Strategy::Nothing => (nothing_label(), Color32::GRAY),
                                 };
                                 let commands: Vec<String> =
                                     planned_commands(p, Some(&entry.found.root), &mode)
@@ -911,7 +952,7 @@ impl App {
                                     if ui
                                         .add_enabled(
                                             !commands.is_empty(),
-                                            egui::Button::new(s::COPY_COMMAND),
+                                            egui::Button::new(s::COPY_COMMAND()),
                                         )
                                         .clicked()
                                     {
@@ -921,7 +962,7 @@ impl App {
                                 });
                             }
                             Some(Err(e)) => {
-                                ui.colored_label(RED, format!("übersprungen: {e}"))
+                                ui.colored_label(RED, format!("{}: {e}", s::JOB_SKIPPED()))
                                     .on_hover_text(e);
                             }
                             None => {
@@ -936,10 +977,10 @@ impl App {
             ui.ctx().copy_text(text);
         }
 
-        egui::CollapsingHeader::new(s::LOG)
+        egui::CollapsingHeader::new(s::LOG())
             .default_open(true)
             .show(ui, |ui| {
-                if ui.small_button(s::COPY).clicked() {
+                if ui.small_button(s::COPY()).clicked() {
                     ui.ctx().copy_text(self.log.join("\n"));
                 }
                 egui::ScrollArea::vertical()
@@ -958,10 +999,26 @@ impl App {
 
 fn files_label(n: usize) -> String {
     if n == 1 {
-        "1 Datei".to_string()
+        tr!("1 file", "1 Datei")
     } else {
-        format!("{n} Dateien")
+        tr!("{n} files", "{n} Dateien")
     }
+}
+
+fn remux_label(removed: usize) -> String {
+    if removed == 1 {
+        tr!("Remux (−1 track)", "Remux (−1 Spur)")
+    } else {
+        tr!("Remux (−{removed} tracks)", "Remux (−{removed} Spuren)")
+    }
+}
+
+fn header_label(changed: usize) -> String {
+    tr!("Header only (~{changed})", "nur Header (~{changed})")
+}
+
+fn nothing_label() -> String {
+    tr!("nothing to do", "nichts zu tun")
 }
 
 /// Checkbox mit drei Zuständen wie im Vorbild: aus → halb (Standard) → ganz (Standard + Forced).
@@ -969,7 +1026,7 @@ fn tristate(ui: &mut egui::Ui, mode: &mut DefaultMode, label: &str) -> bool {
     let mut checked = *mode != DefaultMode::Off;
     let r = ui
         .add(egui::Checkbox::new(&mut checked, label).indeterminate(*mode == DefaultMode::Default))
-        .on_hover_text(s::DEFAULT_TOOLTIP);
+        .on_hover_text(s::DEFAULT_TOOLTIP());
     if r.clicked() {
         *mode = mode.next();
         true
@@ -980,9 +1037,9 @@ fn tristate(ui: &mut egui::Ui, mode: &mut DefaultMode, label: &str) -> bool {
 
 fn sections(opts: &Options) -> [(&'static str, &[TrackRef]); 3] {
     [
-        (s::SECTION_NUMBER, opts.numbers.as_slice()),
-        (s::SECTION_LANGUAGE, opts.languages.as_slice()),
-        (s::SECTION_NAME, opts.names.as_slice()),
+        (s::SECTION_NUMBER(), opts.numbers.as_slice()),
+        (s::SECTION_LANGUAGE(), opts.languages.as_slice()),
+        (s::SECTION_NAME(), opts.names.as_slice()),
     ]
 }
 
@@ -1017,7 +1074,7 @@ fn keep_dropdown(ui: &mut egui::Ui, kind: TrackType, c: &mut TypeControls, opts:
     let text = if !c.keep_enabled {
         RichText::new("–")
     } else if c.keep.is_empty() {
-        RichText::new(s::DISCARD_ALL).italics()
+        RichText::new(s::DISCARD_ALL()).italics()
     } else {
         RichText::new(
             c.keep
@@ -1034,7 +1091,7 @@ fn keep_dropdown(ui: &mut egui::Ui, kind: TrackType, c: &mut TypeControls, opts:
         .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
         .show_ui(ui, |ui| {
             if opts.is_empty() {
-                ui.weak(s::NO_TRACKS);
+                ui.weak(s::NO_TRACKS());
                 return;
             }
             let total = opts.all().count();
@@ -1042,7 +1099,7 @@ fn keep_dropdown(ui: &mut egui::Ui, kind: TrackType, c: &mut TypeControls, opts:
             let mut all = selected == total;
             if ui
                 .add(
-                    egui::Checkbox::new(&mut all, s::ALL_TRACKS)
+                    egui::Checkbox::new(&mut all, s::ALL_TRACKS())
                         .indeterminate(selected > 0 && selected < total),
                 )
                 .clicked()
@@ -1090,7 +1147,7 @@ fn default_dropdown(
         c.default_ref
             .as_ref()
             .map(|r| kind_label(kind, r))
-            .unwrap_or_else(|| s::DEFAULT_NONE.to_string())
+            .unwrap_or_else(|| s::DEFAULT_NONE().to_string())
     };
     egui::ComboBox::from_id_salt(("default", kind))
         .selected_text(text)
@@ -1098,7 +1155,7 @@ fn default_dropdown(
         .height(420.0)
         .show_ui(ui, |ui| {
             if ui
-                .selectable_label(c.default_ref.is_none(), s::DEFAULT_NONE)
+                .selectable_label(c.default_ref.is_none(), s::DEFAULT_NONE())
                 .clicked()
             {
                 c.default_ref = None;
@@ -1128,13 +1185,14 @@ fn probe_status(ui: &mut egui::Ui, e: &crate::state::FileEntry) {
     match &e.probe {
         ProbeState::Pending => {
             ui.spinner();
-            ui.weak(s::STATUS_PROBING);
+            ui.weak(s::STATUS_PROBING());
         }
         ProbeState::Ready(_) => {
-            ui.weak(s::STATUS_READY);
+            ui.weak(s::STATUS_READY());
         }
         ProbeState::Failed(err) => {
-            ui.colored_label(RED, "✗ Fehler").on_hover_text(err);
+            ui.colored_label(RED, tr!("✗ Error", "✗ Fehler"))
+                .on_hover_text(err);
         }
     }
 }
@@ -1143,7 +1201,7 @@ fn job_status(ui: &mut egui::Ui, job: &JobState) {
     match job {
         JobState::Idle => {}
         JobState::Queued => {
-            ui.weak("in Warteschlange");
+            ui.weak(s::JOB_QUEUED());
         }
         JobState::Running(p) => {
             ui.add(
@@ -1156,13 +1214,14 @@ fn job_status(ui: &mut egui::Ui, job: &JobState) {
             ui.colored_label(GREEN, format!("✓ {t}")).on_hover_text(t);
         }
         JobState::Failed(err) => {
-            ui.colored_label(RED, "✗ fehlgeschlagen").on_hover_text(err);
+            ui.colored_label(RED, format!("✗ {}", s::JOB_FAILED()))
+                .on_hover_text(err);
         }
         JobState::Skipped(reason) => {
-            ui.weak("übersprungen").on_hover_text(reason);
+            ui.weak(s::JOB_SKIPPED()).on_hover_text(reason);
         }
         JobState::Cancelled => {
-            ui.weak("abgebrochen");
+            ui.weak(s::JOB_CANCELLED());
         }
     }
 }

@@ -16,6 +16,7 @@
 
 ## Projekt
 
-- Sprache von Oberfläche, Fehlermeldungen und Commit-Nachrichten: Deutsch. `README.md` ist Englisch.
-- GUI-Texte zentral in `crates/gui/src/strings.rs`.
+- Oberfläche und Meldungen: Englisch (Standard) und Deutsch – neue Texte immer in beiden Sprachen
+  (`crates/gui/src/strings.rs`, im Kern `tr!` aus `crates/core/src/i18n.rs`).
+- `README.md` ist Englisch; Commit-Nachrichten und Code-Kommentare Deutsch.
 - Aufbau und Bedienung: siehe `README.md`.

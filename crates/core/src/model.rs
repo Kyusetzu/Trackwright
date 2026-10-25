@@ -27,13 +27,14 @@ impl TrackType {
         }
     }
 
-    /// Deutscher Anzeigename.
+    /// Anzeigename in der UI-Sprache.
     pub fn label(self) -> &'static str {
+        use crate::i18n::t;
         match self {
             TrackType::Video => "Video",
             TrackType::Audio => "Audio",
-            TrackType::Subtitles => "Untertitel",
-            TrackType::Other => "Sonstige",
+            TrackType::Subtitles => t("Subtitles", "Untertitel"),
+            TrackType::Other => t("Other", "Sonstige"),
         }
     }
 

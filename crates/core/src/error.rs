@@ -1,49 +1,111 @@
 //! Fehlertypen des Kerns.
 
+use crate::tr;
 use std::path::PathBuf;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("{program} konnte nicht gestartet werden: {source}")]
     Spawn {
         program: String,
-        #[source]
         source: std::io::Error,
     },
-    #[error("ungültige Ausgabe von mkvmerge -J für {}: {source}", path.display())]
     Json {
         path: PathBuf,
-        #[source]
         source: serde_json::Error,
     },
-    #[error("{} ist keine Matroska-Datei", path.display())]
-    NotMatroska { path: PathBuf },
-    #[error("mkvmerge kann {} nicht lesen: {message}", path.display())]
-    Probe { path: PathBuf, message: String },
-    #[error("E/A-Fehler bei {}: {source}", path.display())]
+    NotMatroska {
+        path: PathBuf,
+    },
+    Probe {
+        path: PathBuf,
+        message: String,
+    },
     Io {
         path: PathBuf,
-        #[source]
         source: std::io::Error,
     },
-    #[error("abgebrochen")]
     Cancelled,
-    #[error("Ziel existiert bereits: {}", .0.display())]
     TargetExists(PathBuf),
-    #[error("{program} meldet einen Fehler (Exit-Code {code}): {message}")]
     ToolFailed {
         program: String,
         code: String,
         message: String,
     },
-    #[error("Prüfung fehlgeschlagen: {0}")]
     Verify(String),
-    #[error("{0}")]
     Unsafe(String),
-    #[error("{0}")]
     Environment(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Spawn { program, source } => f.write_str(&tr!(
+                "{program} could not be started: {source}",
+                "{program} konnte nicht gestartet werden: {source}"
+            )),
+            Error::Json { path, source } => {
+                let p = path.display();
+                f.write_str(&tr!(
+                    "invalid output from mkvmerge -J for {p}: {source}",
+                    "ungültige Ausgabe von mkvmerge -J für {p}: {source}"
+                ))
+            }
+            Error::NotMatroska { path } => {
+                let p = path.display();
+                f.write_str(&tr!(
+                    "{p} is not a Matroska file",
+                    "{p} ist keine Matroska-Datei"
+                ))
+            }
+            Error::Probe { path, message } => {
+                let p = path.display();
+                f.write_str(&tr!(
+                    "mkvmerge cannot read {p}: {message}",
+                    "mkvmerge kann {p} nicht lesen: {message}"
+                ))
+            }
+            Error::Io { path, source } => {
+                let p = path.display();
+                f.write_str(&tr!(
+                    "I/O error for {p}: {source}",
+                    "E/A-Fehler bei {p}: {source}"
+                ))
+            }
+            Error::Cancelled => f.write_str(crate::i18n::t("cancelled", "abgebrochen")),
+            Error::TargetExists(path) => {
+                let p = path.display();
+                f.write_str(&tr!(
+                    "target already exists: {p}",
+                    "Ziel existiert bereits: {p}"
+                ))
+            }
+            Error::ToolFailed {
+                program,
+                code,
+                message,
+            } => f.write_str(&tr!(
+                "{program} reported an error (exit code {code}): {message}",
+                "{program} meldet einen Fehler (Exit-Code {code}): {message}"
+            )),
+            Error::Verify(m) => f.write_str(&tr!(
+                "verification failed: {m}",
+                "Prüfung fehlgeschlagen: {m}"
+            )),
+            Error::Unsafe(m) | Error::Environment(m) => f.write_str(m),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Spawn { source, .. } | Error::Io { source, .. } => Some(source),
+            Error::Json { source, .. } => Some(source),
+            _ => None,
+        }
+    }
 }
 
 impl Error {

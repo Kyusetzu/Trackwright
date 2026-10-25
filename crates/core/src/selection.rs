@@ -37,9 +37,9 @@ impl TrackRef {
     /// Anzeigetext, z. B. „Nr. 2“, „Deutsch (ger)“, „„Signs““.
     pub fn label(&self) -> String {
         match self {
-            TrackRef::Number(n) => format!("Nr. {n}"),
+            TrackRef::Number(n) => crate::tr!("No. {n}", "Nr. {n}"),
             TrackRef::Lang(l) => l.display_name(),
-            TrackRef::Name(n) => format!("„{n}“"),
+            TrackRef::Name(n) => crate::tr!("\"{n}\"", "„{n}“"),
         }
     }
 }
@@ -105,16 +105,37 @@ impl Selection {
 }
 
 /// Grund, warum eine Datei übersprungen wird.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlanIssue {
-    #[error("{kind}: {} nicht vorhanden – Datei wird übersprungen", join(refs))]
     Missing {
         kind: TrackType,
         refs: Vec<TrackRef>,
     },
-    #[error("{kind}: Standard-Spur {track} wird nicht behalten – Datei wird übersprungen")]
-    DefaultNotKept { kind: TrackType, track: TrackRef },
+    DefaultNotKept {
+        kind: TrackType,
+        track: TrackRef,
+    },
 }
+
+impl fmt::Display for PlanIssue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PlanIssue::Missing { kind, refs } => {
+                let r = join(refs);
+                f.write_str(&crate::tr!(
+                    "{kind}: {r} not present – file will be skipped",
+                    "{kind}: {r} nicht vorhanden – Datei wird übersprungen"
+                ))
+            }
+            PlanIssue::DefaultNotKept { kind, track } => f.write_str(&crate::tr!(
+                "{kind}: default track {track} is not kept – file will be skipped",
+                "{kind}: Standard-Spur {track} wird nicht behalten – Datei wird übersprungen"
+            )),
+        }
+    }
+}
+
+impl std::error::Error for PlanIssue {}
 
 fn join(refs: &[TrackRef]) -> String {
     refs.iter()
@@ -275,7 +296,10 @@ pub fn plan_file(media: &MediaInfo, sel: &Selection) -> Result<FilePlan, PlanIss
         let total = tracks.iter().filter(|t| t.kind == kind).count();
         let kept = tracks.iter().filter(|t| t.kind == kind && t.keep).count();
         if total > 0 && kept == 0 {
-            warnings.push(format!("alle {kind}-Spuren werden verworfen"));
+            warnings.push(crate::tr!(
+                "all {kind} tracks will be discarded",
+                "alle {kind}-Spuren werden verworfen"
+            ));
         }
     }
 
@@ -476,7 +500,7 @@ mod tests {
                 refs: vec![TrackRef::Number(4), lang("fre")]
             }
         );
-        assert!(err.to_string().contains("Nr. 4"), "{err}");
+        assert!(err.to_string().contains("No. 4"), "{err}");
 
         let sel = Selection {
             subtitles: TypeSelection {
@@ -538,16 +562,16 @@ mod tests {
         assert_eq!(
             langs,
             vec![
-                "Deutsch (ger)",
-                "Englisch (eng)",
-                "Japanisch (jpn)",
-                "undefiniert"
+                "English (eng)",
+                "German (ger)",
+                "Japanese (jpn)",
+                "undefined"
             ]
         );
         let names: Vec<String> = o.names.iter().map(TrackRef::label).collect();
         assert_eq!(
             names,
-            vec!["„Deutsch“", "„English“", "„Kommentar“", "„日本語“"]
+            vec!["\"Deutsch\"", "\"English\"", "\"Kommentar\"", "\"日本語\""]
         );
         assert!(options(std::iter::empty(), TrackType::Audio).is_empty());
     }
